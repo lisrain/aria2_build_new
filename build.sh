@@ -102,7 +102,6 @@ apt install -y g++ \
   jq \
   pkgconf \
   file \
-  binutils \
   tcl \
   autoconf \
   automake \
@@ -357,7 +356,7 @@ prepare_libxml2() {
 
 prepare_sqlite() {
   sqlite_tag="$(retry wget -qO- --compression=auto https://www.sqlite.org/index.html \| sed -nr "'s/.*>Version (.+)<.*/\1/p'")"
-  sqlite_latest_url="https://github.com/sqlite/sqlite/archive/release.tar.gz"
+  sqlite_latest_url="https://github.com/sqlite/sqlite/archive/refs/tags/version-${sqlite_tag}.tar.gz"
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
     sqlite_latest_url="https://ghfast.top/${sqlite_latest_url}"
   fi
