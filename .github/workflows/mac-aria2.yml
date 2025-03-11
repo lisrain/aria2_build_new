@@ -29,9 +29,6 @@ jobs:
           export LDFLAGS="-L/opt/homebrew/lib"
           export CPPFLAGS="-I/opt/homebrew/include"
           autoreconf -ivf
-          aclocal
-          autoconf
-          automake --add-missing
           ./configure \
             --enable-static \
             --disable-shared \
