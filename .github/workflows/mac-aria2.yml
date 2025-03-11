@@ -46,6 +46,7 @@ jobs:
             --disable-nls \
             --without-libintl-prefix \
             ARIA2_STATIC=yes
+          sed -i '' 's/ po / /' Makefile
           make -j$(sysctl -n hw.ncpu)
 
       - name: Test aria2
