@@ -44,6 +44,7 @@ jobs:
             --enable-bittorrent \
             --enable-websocket \
             --disable-nls \
+            --without-gettext \
             ARIA2_STATIC=yes
           make -j$(sysctl -n hw.ncpu)
 
