@@ -1,0 +1,62 @@
+name: Build aria2 with AppleTLS for MacOS (64-bit)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install automake autoconf libtool pkg-config
+          brew install libssh2 zlib sqlite3 c-ares libxml2 nettle gmp cppunit
+
+      - name: Build and configure aria2
+        run: |
+          git clone https://github.com/aria2/aria2.git
+          cd aria2
+          if [ -d "$GITHUB_WORKSPACE/patch" ]; then
+            for patch_file in $GITHUB_WORKSPACE/patch/*.patch; do
+              patch -p1 < "$patch_file" || exit 1
+            done
+          fi
+          export LDFLAGS="-L/opt/homebrew/lib"
+          export CPPFLAGS="-I/opt/homebrew/include"
+          autoreconf -ivf
+          aclocal
+          autoconf
+          automake --add-missing
+          ./configure \
+            --enable-static \
+            --disable-shared \
+            --with-appletls \
+            --with-libz \
+            --with-libcares \
+            --with-sqlite3 \
+            --with-libxml2 \
+            --with-libgmp \
+            --with-libnettle \
+            --with-libssh2 \
+            --enable-metalink \
+            --enable-bittorrent \
+            --enable-websocket \
+            --disable-nls \
+            ARIA2_STATIC=yes
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Test aria2
+        run: |
+          cd aria2
+          ./src/aria2c --version
+          make check
+          
+          echo "验证二进制文件的架构:"
+          file ./src/aria2c
+          echo "验证是否为静态链接:"
+          otool -L ./src/aria2c
