@@ -12,6 +12,7 @@ on:
       - released
   schedule:
     - cron: "0 0 * * 6"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,7 +20,7 @@ permissions:
 jobs:
   create-prerelease:
     name: Create Prerelease
-    if: github.event_name == 'push' || github.event_name == 'schedule'
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -91,7 +92,7 @@ jobs:
           zip -j9v "/tmp/${ARCHIVE_NAME}" "${GITHUB_WORKSPACE}"/aria2c*
         shell: bash
       - name: Prerelease assets
-        if: github.event_name == 'push' || github.event_name == 'schedule'
+        if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v3
         with:
           files: /tmp/${{ env.ARCHIVE_NAME }}
@@ -154,7 +155,7 @@ jobs:
           zip -j9v "/tmp/${ARCHIVE_NAME}" "${GITHUB_WORKSPACE}"/aria2c*
         shell: bash
       - name: Prerelease assets
-        if: github.event_name == 'push' || github.event_name == 'schedule'
+        if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v3
         with:
           files: /tmp/${{ env.ARCHIVE_NAME }}
