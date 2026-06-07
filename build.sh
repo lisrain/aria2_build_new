@@ -490,7 +490,7 @@ build_aria2() {
     if [ ! -f "${DOWNLOADS_DIR}/ca-certificates.crt" ]; then
       retry wget -cT10 -O "${DOWNLOADS_DIR}/ca-certificates.crt" "https://curl.se/ca/cacert.pem"
     fi
-    ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares --with-ca-bundle=\"C:/ca-certificates.crt\""
+    ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares --with-ca-bundle=C:/ca-certificates.crt"
   else
     ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares"
   fi
