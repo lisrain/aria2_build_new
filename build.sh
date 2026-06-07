@@ -365,6 +365,22 @@ prepare_libiconv() {
   ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --enable-static --disable-shared
   make -j$(nproc)
   make install
+  # 手动创建 libiconv 的 pkg-config 文件（如果不存在）
+  if [ ! -f "${CROSS_PREFIX}/lib/pkgconfig/libiconv.pc" ]; then
+    mkdir -p "${CROSS_PREFIX}/lib/pkgconfig"
+    cat > "${CROSS_PREFIX}/lib/pkgconfig/libiconv.pc" << EOF
+prefix=${CROSS_PREFIX}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: libiconv
+Description: GNU libiconv
+Version: ${libiconv_tag}
+Libs: -L\${libdir} -liconv
+Cflags: -I\${includedir}
+EOF
+  fi
   echo "- libiconv: ${libiconv_tag}, source: ${libiconv_latest_url:-cached libiconv}" >>"${BUILD_INFO}"
 }
 
@@ -504,7 +520,7 @@ build_aria2() {
   if [ x"${TARGET_HOST}" = xWindows ]; then
     ARIA2_EXT_CONF='--without-openssl --without-wintls --with-libcares'
   fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF}
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF} --without-libxml2 --disable-bittorrent --disable-metalink
   make -j$(nproc)
   make install
   echo "- aria2: source: ${aria2_latest_url:-cached aria2}" >>"${BUILD_INFO}"
