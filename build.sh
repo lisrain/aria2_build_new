@@ -383,19 +383,13 @@ prepare_libiconv() {
 }
 
 prepare_libxml2() {
-  libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://gitlab.gnome.org/api/graphql' \
-    --header="Content-Type: application/json" \
-    --post-data='{"query":"query {project(fullPath:\"GNOME/libxml2\"){releases(first:1,sort:RELEASED_AT_DESC){nodes{assets{links{nodes{directAssetUrl}}}}}}}}"}' \
-    | jq -r '.data.project.releases.nodes[0].assets.links.nodes[0].directAssetUrl')"
-  # Fallback to GitHub mirror if GitLab fails
-  if [ -z "${libxml2_latest_url}" ] || [ "${libxml2_latest_url}" = "null" ]; then
-    libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://github.com/GNOME/libxml2/tags' \
-      | grep -o '/GNOME/libxml2/archive/refs/tags/v[0-9.]*.tar.gz' \
-      | head -1 \
-      | sed -r 's|/GNOME/libxml2/archive/refs/tags/||')"
-    if [ -n "${libxml2_latest_url}" ]; then
-      libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/${libxml2_latest_url}"
-    fi
+  # Use GitHub tags as primary source since GitLab GraphQL query has quoting issues with retry/eval
+  libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://github.com/GNOME/libxml2/tags' \
+    | grep -o '/GNOME/libxml2/archive/refs/tags/v[0-9.]*.tar.gz' \
+    | head -1 \
+    | sed -r 's|/GNOME/libxml2/archive/refs/tags/||')"
+  if [ -n "${libxml2_latest_url}" ]; then
+    libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/${libxml2_latest_url}"
   fi
   libxml2_tag="$(echo "${libxml2_latest_url}" | sed -r 's/.*libxml2-(.+)\.tar.*/\1/')"
   libxml2_filename="$(echo "${libxml2_latest_url}" | sed -r 's/.*(libxml2-(.+\.tar.*))/\1/')"
