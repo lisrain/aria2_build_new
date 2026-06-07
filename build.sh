@@ -172,10 +172,7 @@ echo "Building using these dependencies:" >>"${BUILD_INFO}"
 
 prepare_cmake() {
   if ! which cmake &>/dev/null; then
-    cmake_latest_ver="$(retry wget -qO- --compression=auto https://cmake.org/download/ \
-      | grep 'Latest Release' \
-      | sed -r 's/.*Latest Release\s*\((.+)\).*/\1/' \
-      | head -1)"
+    cmake_latest_ver="3.30.3"
     cmake_binary_url="https://github.com/Kitware/CMake/releases/download/v${cmake_latest_ver}/cmake-${cmake_latest_ver}-linux-x86_64.tar.gz"
     cmake_sha256_url="https://github.com/Kitware/CMake/releases/download/v${cmake_latest_ver}/cmake-${cmake_latest_ver}-SHA-256.txt"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
@@ -199,10 +196,7 @@ prepare_cmake() {
 
 prepare_ninja() {
   if ! which ninja &>/dev/null; then
-    ninja_ver="$(retry wget -qO- --compression=auto https://ninja-build.org/ \
-      | grep 'The last Ninja release is' \
-      | sed -r 's@.*<b>(.+)</b>.*@\1@' \
-      | head -1)"
+    ninja_ver="1.12.1"
     ninja_binary_url="https://github.com/ninja-build/ninja/releases/download/${ninja_ver}/ninja-linux.zip"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
       ninja_binary_url="https://ghfast.top/${ninja_binary_url}"
@@ -336,12 +330,8 @@ prepare_ssl() {
       echo "- libressl: ${libressl_ver}, source: ${libressl_latest_url:-cached libressl}" >>"${BUILD_INFO}"
     else
       # openssl
-      openssl_filename="$(retry wget -qO- --compression=auto https://openssl-library.org/source/ \
-        | grep -o '>openssl-3\(\.[0-9]*\)*tar.gz<' \
-        | grep -o '[^>]*.tar.gz' \
-        | sort -nr \
-        | head -1)"
-      openssl_ver="$(echo "${openssl_filename}" | sed -r 's/openssl-(.+)\.tar\.gz/\1/')"
+      openssl_ver="3.3.2"
+      openssl_filename="openssl-${openssl_ver}.tar.gz"
       openssl_latest_url="https://github.com/openssl/openssl/releases/download/openssl-${openssl_ver}/${openssl_filename}"
       if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
         openssl_latest_url="https://ghfast.top/${openssl_latest_url}"
@@ -383,25 +373,8 @@ prepare_libiconv() {
 }
 
 prepare_libxml2() {
-  # Use GitHub tags with authentication to avoid API rate limiting
-  if [ -n "${GITHUB_TOKEN}" ]; then
-    libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://api.github.com/repos/GNOME/libxml2/tags' \
-      --header="Authorization: token ${GITHUB_TOKEN}" \
-      | jq -r '.[0].name' \
-      | sed -r 's/^v//')"
-  else
-    libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://github.com/GNOME/libxml2/tags' \
-      | grep -o '/GNOME/libxml2/archive/refs/tags/v[0-9.]*.tar.gz' \
-      | head -1 \
-      | sed -r 's|/GNOME/libxml2/archive/refs/tags/||')"
-  fi
-  if [ -n "${libxml2_latest_url}" ]; then
-    if [[ "${libxml2_latest_url}" =~ ^v ]]; then
-      libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/${libxml2_latest_url}.tar.gz"
-    else
-      libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/v${libxml2_latest_url}.tar.gz"
-    fi
-  fi
+  libxml2_tag="2.15.3"
+  libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/v${libxml2_tag}.tar.gz"
   libxml2_tag="$(echo "${libxml2_latest_url}" | sed -r 's/.*libxml2-(.+)\.tar.*/\1/')"
   libxml2_filename="$(echo "${libxml2_latest_url}" | sed -r 's/.*(libxml2-(.+\.tar.*))/\1/')"
   if [ ! -f "${DOWNLOADS_DIR}/${libxml2_filename}" ]; then
@@ -422,7 +395,7 @@ prepare_libxml2() {
 }
 
 prepare_sqlite() {
-  sqlite_tag="$(retry wget -qO- --compression=auto https://www.sqlite.org/index.html \| sed -nr "'s/.*>Version (.+)<.*/\1/p'")"
+  sqlite_tag="3.46.1"
   sqlite_latest_url="https://github.com/sqlite/sqlite/archive/refs/tags/version-${sqlite_tag}.tar.gz"
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
     sqlite_latest_url="https://ghfast.top/${sqlite_latest_url}"
