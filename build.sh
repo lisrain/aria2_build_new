@@ -196,7 +196,7 @@ prepare_cmake() {
 
 prepare_ninja() {
   if ! which ninja &>/dev/null; then
-    ninja_ver="1.13.2"
+    ninja_ver="v1.13.2"
     ninja_binary_url="https://github.com/ninja-build/ninja/releases/download/${ninja_ver}/ninja-linux.zip"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
       ninja_binary_url="https://ghfast.top/${ninja_binary_url}"
