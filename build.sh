@@ -382,7 +382,9 @@ prepare_libxml2() {
   if [ ! -f "./configure" ]; then
     ./autogen.sh
   fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared CPPFLAGS="-I${CROSS_PREFIX}/include" LDFLAGS="-L${CROSS_PREFIX}/lib"
+  # 确保 libiconv 可以被找到
+  export PKG_CONFIG_PATH="${CROSS_PREFIX}/lib/pkgconfig:${CROSS_PREFIX}/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared
   make -j$(nproc)
   make install
   libxml2_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/"libxml-*.pc)"
