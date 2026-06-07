@@ -134,15 +134,16 @@ case "${TARGET_HOST}" in
   ;;
 *)
   TARGET_HOST=Linux
-  apt install -y "qemu-user-static"
-  RUNNER_CHECKER="qemu-${TARGET_ARCH}-static"
+  apt install -y "qemu-user"
+  RUNNER_CHECKER="qemu-${TARGET_ARCH}"
   ;;
 esac
 
 export PATH="${CROSS_ROOT}/bin:${PATH}"
 export CROSS_PREFIX="${CROSS_ROOT}/${CROSS_HOST}"
-export PKG_CONFIG_PATH="${CROSS_PREFIX}/lib64/pkgconfig:${CROSS_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH}"
-export LDFLAGS="-L${CROSS_PREFIX}/lib64 -L${CROSS_PREFIX}/lib -I${CROSS_PREFIX}/include -s -static --static"
+export PKG_CONFIG_LIBDIR="${CROSS_PREFIX}/lib64/pkgconfig:${CROSS_PREFIX}/lib/pkgconfig"
+export LDFLAGS="-L${CROSS_PREFIX}/lib64 -L${CROSS_PREFIX}/lib -s -static --static"
+export CFLAGS="-I${CROSS_PREFIX}/include"
 SELF_DIR="$(dirname "$(realpath "${0}")")"
 BUILD_INFO="${SELF_DIR}/build_info.md"
 
@@ -212,7 +213,7 @@ prepare_ninja() {
 
 prepare_zlib() {
   if [ x"${USE_ZLIB_NG}" = x"1" ]; then
-    zlib_ng_latest_tag="$(retry wget -qO- --compression=auto https://api.github.com/repos/zlib-ng/zlib-ng/releases \| jq -r "'.[0].tag_name'")"
+    zlib_ng_latest_tag="2.3.3"
     zlib_ng_latest_url="https://github.com/zlib-ng/zlib-ng/archive/refs/tags/${zlib_ng_latest_tag}.tar.gz"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
       zlib_ng_latest_url="https://ghfast.top/${zlib_ng_latest_url}"
@@ -271,8 +272,12 @@ prepare_xz() {
   # if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
   #   xz_latest_url="https://ghfast.top/${xz_latest_url}"
   # fi
-  # Download from sourceforge
+  # Download from sourceforge with error handling
   xz_tag="$(retry wget -qO- --compression=auto https://sourceforge.net/projects/lzmautils/files/ \| grep -i \'span class=\"sub-label\"\' \| head -1 \| sed -r "'s/.*xz-(.+)\.tar\.gz.*/\1/'")"
+  if [ -z "${xz_tag}" ]; then
+    echo "Failed to get xz version from sourceforge, using fallback version 5.8.1"
+    xz_tag="5.8.1"
+  fi
   xz_latest_url="https://sourceforge.net/projects/lzmautils/files/xz-${xz_tag}.tar.xz"
   if [ ! -f "${DOWNLOADS_DIR}/xz-${xz_tag}.tar.xz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/xz-${xz_tag}.tar.xz.part" "${xz_latest_url}"
@@ -354,8 +359,15 @@ prepare_libiconv() {
 
 prepare_libxml2() {
   libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://gitlab.gnome.org/api/graphql' --header="'Content-Type: application/json'" --post-data="'{\"query\":\"query {project(fullPath:\\\"GNOME/libxml2\\\"){releases(first:1,sort:RELEASED_AT_DESC){nodes{assets{links{nodes{directAssetUrl}}}}}}}\"}'" \| jq -r "'.data.project.releases.nodes[0].assets.links.nodes[0].directAssetUrl'")"
-  libxml2_tag="$(echo "${libxml2_latest_url}" | sed -r 's/.*libxml2-(.+).tar.*/\1/')"
-  libxml2_filename="$(echo "${libxml2_latest_url}" | sed -r 's/.*(libxml2-(.+).tar.*)/\1/')"
+  # Fallback to GitHub mirror if GitLab fails
+  if [ -z "${libxml2_latest_url}" ] || [ "${libxml2_latest_url}" = "null" ]; then
+    libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://github.com/GNOME/libxml2/tags' \| grep -o "'/GNOME/libxml2/archive/refs/tags/v[0-9.]*.tar.gz'" \| head -1 \| sed -r "'s|/GNOME/libxml2/archive/refs/tags/||')"
+    if [ -n "${libxml2_latest_url}" ]; then
+      libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/${libxml2_latest_url}"
+    fi
+  fi
+  libxml2_tag="$(echo "${libxml2_latest_url}" | sed -r 's/.*libxml2-(.+)\.tar.*/\1/')"
+  libxml2_filename="$(echo "${libxml2_latest_url}" | sed -r 's/.*(libxml2-(.+\.tar.*))/\1/')"
   if [ ! -f "${DOWNLOADS_DIR}/${libxml2_filename}" ]; then
     retry wget -c -O "${DOWNLOADS_DIR}/${libxml2_filename}.part" "${libxml2_latest_url}"
     mv -fv "${DOWNLOADS_DIR}/${libxml2_filename}.part" "${DOWNLOADS_DIR}/${libxml2_filename}"
@@ -363,6 +375,9 @@ prepare_libxml2() {
   mkdir -p "/usr/src/libxml2-${libxml2_tag}"
   tar -axf "${DOWNLOADS_DIR}/${libxml2_filename}" --strip-components=1 -C "/usr/src/libxml2-${libxml2_tag}"
   cd "/usr/src/libxml2-${libxml2_tag}"
+  if [ ! -f "./configure" ]; then
+    ./autogen.sh
+  fi
   ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared
   make -j$(nproc)
   make install
@@ -397,7 +412,7 @@ prepare_sqlite() {
 }
 
 prepare_c_ares() {
-  cares_latest_tag="$(retry wget -qO- --compression=auto https://api.github.com/repos/c-ares/c-ares/releases \| jq -r "'.[0].tag_name'")"
+  cares_latest_tag="v1.34.6"
   cares_ver="${cares_latest_tag#v}"
   cares_latest_url="https://github.com/c-ares/c-ares/releases/download/${cares_latest_tag}/c-ares-${cares_ver}.tar.gz"
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
@@ -479,10 +494,8 @@ build_aria2() {
   if [ ! -f ./configure ]; then
     autoreconf -i
   fi
-  if [ x"${TARGET_HOST}" = xwin ]; then
-    ARIA2_EXT_CONF='--without-openssl'
-  # else
-  #   ARIA2_EXT_CONF='--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt'
+  if [ x"${TARGET_HOST}" = xWindows ]; then
+    ARIA2_EXT_CONF='--without-openssl --without-wintls --with-libcares'
   fi
   ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF}
   make -j$(nproc)
