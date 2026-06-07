@@ -484,27 +484,9 @@ build_aria2() {
   if [ ! -f ./configure ]; then
     autoreconf -i
   fi
-  # Configure aria2 with SSL certificate handling
-  if [ x"${TARGET_HOST}" = xWindows ]; then
-    # For Windows, download and bundle CA certificates
-    if [ ! -f "${DOWNLOADS_DIR}/ca-certificates.crt" ]; then
-      retry wget -cT10 -O "${DOWNLOADS_DIR}/ca-certificates.crt" "https://curl.se/ca/cacert.pem"
-    fi
-    ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares --with-ca-bundle=\"C:/ca-certificates.crt\""
-  else
-    ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares"
-  fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF}
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --without-wintls ARIA2_STATIC=yes
   make -j$(nproc)
   make install
-  # Strip debug symbols to reduce binary size
-  if [ x"${TARGET_HOST}" = xWindows ]; then
-    "${CROSS_HOST}-strip" "${CROSS_PREFIX}/bin/"aria2c* || true
-  fi
-  # Bundle CA certificates for Windows builds
-  if [ x"${TARGET_HOST}" = xWindows ]; then
-    cp -v "${DOWNLOADS_DIR}/ca-certificates.crt" "${CROSS_PREFIX}/bin/"
-  fi
   echo "- aria2: source: ${aria2_latest_url:-cached aria2}" >>"${BUILD_INFO}"
   echo >>"${BUILD_INFO}"
 }
@@ -554,7 +536,3 @@ esac
 
 # get release
 cp -fv "${CROSS_PREFIX}/bin/"aria2* "${SELF_DIR}"
-# Bundle CA certificates for Windows builds
-if [ x"${TARGET_HOST}" = xWindows ]; then
-  cp -fv "${DOWNLOADS_DIR}/ca-certificates.crt" "${SELF_DIR}"
-fi
