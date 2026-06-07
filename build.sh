@@ -560,8 +560,6 @@ prepare_ninja
 prepare_zlib
 prepare_xz
 prepare_ssl
-prepare_libiconv
-prepare_libxml2
 prepare_sqlite
 prepare_c_ares
 prepare_libssh2
