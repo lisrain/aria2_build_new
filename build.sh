@@ -172,7 +172,10 @@ echo "Building using these dependencies:" >>"${BUILD_INFO}"
 
 prepare_cmake() {
   if ! which cmake &>/dev/null; then
-    cmake_latest_ver="$(retry wget -qO- --compression=auto https://cmake.org/download/ \| grep "'Latest Release'" \| sed -r "'s/.*Latest Release\s*\((.+)\).*/\1/'" \| head -1)"
+    cmake_latest_ver="$(retry wget -qO- --compression=auto https://cmake.org/download/ \
+      | grep 'Latest Release' \
+      | sed -r 's/.*Latest Release\s*\((.+)\).*/\1/' \
+      | head -1)"
     cmake_binary_url="https://github.com/Kitware/CMake/releases/download/v${cmake_latest_ver}/cmake-${cmake_latest_ver}-linux-x86_64.tar.gz"
     cmake_sha256_url="https://github.com/Kitware/CMake/releases/download/v${cmake_latest_ver}/cmake-${cmake_latest_ver}-SHA-256.txt"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
@@ -196,7 +199,10 @@ prepare_cmake() {
 
 prepare_ninja() {
   if ! which ninja &>/dev/null; then
-    ninja_ver="$(retry wget -qO- --compression=auto https://ninja-build.org/ \| grep "'The last Ninja release is'" \| sed -r "'s@.*<b>(.+)</b>.*@\1@'" \| head -1)"
+    ninja_ver="$(retry wget -qO- --compression=auto https://ninja-build.org/ \
+      | grep 'The last Ninja release is' \
+      | sed -r 's@.*<b>(.+)</b>.*@\1@' \
+      | head -1)"
     ninja_binary_url="https://github.com/ninja-build/ninja/releases/download/${ninja_ver}/ninja-linux.zip"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
       ninja_binary_url="https://ghfast.top/${ninja_binary_url}"
@@ -242,7 +248,10 @@ prepare_zlib() {
     # Fix mingw build sharedlibdir lost issue
     sed -i 's@^sharedlibdir=.*@sharedlibdir=${libdir}@' "${CROSS_PREFIX}/lib/pkgconfig/zlib.pc"
   else
-    zlib_tag="$(retry wget -qO- --compression=auto https://zlib.net/ \| grep -i "'<FONT.*FONT>'" \| sed -r "'s/.*zlib\s*([^<]+).*/\1/'" \| head -1)"
+    zlib_tag="$(retry wget -qO- --compression=auto https://zlib.net/ \
+      | grep -i '<FONT.*FONT>' \
+      | sed -r 's/.*zlib\s*([^<]+).*/\1/' \
+      | head -1)"
     zlib_latest_url="https://zlib.net/zlib-${zlib_tag}.tar.xz"
     if [ ! -f "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz" ]; then
       retry wget -cT10 -O "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz.part" "${zlib_latest_url}"
@@ -265,7 +274,8 @@ prepare_zlib() {
 
 prepare_xz() {
   # Download from github release (now breakdown)
-  # xz_release_info="$(retry wget -qO- --compression=auto https://api.github.com/repos/tukaani-project/xz/releases \| jq -r "'[.[] | select(.prerelease == false)][0]'")"
+  # xz_release_info="$(retry wget -qO- --compression=auto https://api.github.com/repos/tukaani-project/xz/releases \
+  #   | jq -r '[.[] | select(.prerelease == false)][0]')"
   # xz_tag="$(printf '%s' "${xz_release_info}" | jq -r '.tag_name')"
   # xz_archive_name="$(printf '%s' "${xz_release_info}" | jq -r '.assets[].name | select(endswith("tar.xz"))')"
   # xz_latest_url="https://github.com/tukaani-project/xz/releases/download/${xz_tag}/${xz_archive_name}"
@@ -273,7 +283,10 @@ prepare_xz() {
   #   xz_latest_url="https://ghfast.top/${xz_latest_url}"
   # fi
   # Download from sourceforge with error handling
-  xz_tag="$(retry wget -qO- --compression=auto https://sourceforge.net/projects/lzmautils/files/ \| grep -i \'span class=\"sub-label\"\' \| head -1 \| sed -r "'s/.*xz-(.+)\.tar\.gz.*/\1/'")"
+  xz_tag="$(retry wget -qO- --compression=auto https://sourceforge.net/projects/lzmautils/files/ \
+    | grep -i 'span class="sub-label"' \
+    | head -1 \
+    | sed -r 's/.*xz-(.+)\.tar\.gz.*/\1/')"
   if [ -z "${xz_tag}" ]; then
     echo "Failed to get xz version from sourceforge, using fallback version 5.8.1"
     xz_tag="5.8.1"
@@ -298,7 +311,11 @@ prepare_ssl() {
   if [ x"${TARGET_HOST}" != xWindows ]; then
     if [ x"${USE_LIBRESSL}" = x1 ]; then
       # libressl
-      libressl_tag="$(retry wget -qO- --compression=auto https://www.libressl.org/index.html \| grep "'release is'" \| tail -1 \| sed -r "'s/.* (.+)<.*>$/\1/'")" libressl_latest_url="https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-${libressl_tag}.tar.gz"
+      libressl_tag="$(retry wget -qO- --compression=auto https://www.libressl.org/index.html \
+        | grep 'release is' \
+        | tail -1 \
+        | sed -r 's/.* (.+)<.*>$/\1/')"
+      libressl_latest_url="https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-${libressl_tag}.tar.gz"
       if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
         libressl_latest_url="https://mirror.sjtu.edu.cn/OpenBSD/LibreSSL/libressl-${libressl_tag}.tar.gz"
       fi
@@ -319,7 +336,11 @@ prepare_ssl() {
       echo "- libressl: ${libressl_ver}, source: ${libressl_latest_url:-cached libressl}" >>"${BUILD_INFO}"
     else
       # openssl
-      openssl_filename="$(retry wget -qO- --compression=auto https://openssl-library.org/source/ \| grep -o "'>openssl-3\(\.[0-9]*\)*tar.gz<'" \| grep -o "'[^>]*.tar.gz'" \| sort -nr \| head -1)"
+      openssl_filename="$(retry wget -qO- --compression=auto https://openssl-library.org/source/ \
+        | grep -o '>openssl-3\(\.[0-9]*\)*tar.gz<' \
+        | grep -o '[^>]*.tar.gz' \
+        | sort -nr \
+        | head -1)"
       openssl_ver="$(echo "${openssl_filename}" | sed -r 's/openssl-(.+)\.tar\.gz/\1/')"
       openssl_latest_url="https://github.com/openssl/openssl/releases/download/openssl-${openssl_ver}/${openssl_filename}"
       if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
@@ -342,7 +363,11 @@ prepare_ssl() {
 }
 
 prepare_libiconv() {
-  libiconv_tag="$(retry wget -qO- --compression=auto https://ftpmirror.gnu.org/libiconv/ \| grep -i "'libiconv-.*\.tar\.gz'" \| sed -r "'s/.*libiconv-([^<]+)\.tar\.gz.*/\1/'" \| sort -Vr \| head -1)"
+  libiconv_tag="$(retry wget -qO- --compression=auto https://ftpmirror.gnu.org/libiconv/ \
+    | grep -i 'libiconv-.*\.tar\.gz' \
+    | sed -r 's/.*libiconv-([^<]+)\.tar\.gz.*/\1/' \
+    | sort -Vr \
+    | head -1)"
   libiconv_latest_url="https://ftpmirror.gnu.org/libiconv/libiconv-${libiconv_tag}.tar.gz"
   if [ ! -f "${DOWNLOADS_DIR}/libiconv-${libiconv_tag}.tar.gz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/libiconv-${libiconv_tag}.tar.gz.part" "${libiconv_latest_url}"
@@ -358,10 +383,16 @@ prepare_libiconv() {
 }
 
 prepare_libxml2() {
-  libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://gitlab.gnome.org/api/graphql' --header="'Content-Type: application/json'" --post-data="'{\"query\":\"query {project(fullPath:\\\"GNOME/libxml2\\\"){releases(first:1,sort:RELEASED_AT_DESC){nodes{assets{links{nodes{directAssetUrl}}}}}}}\"}'" \| jq -r "'.data.project.releases.nodes[0].assets.links.nodes[0].directAssetUrl'")"
+  libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://gitlab.gnome.org/api/graphql' \
+    --header="Content-Type: application/json" \
+    --post-data='{"query":"query {project(fullPath:\"GNOME/libxml2\"){releases(first:1,sort:RELEASED_AT_DESC){nodes{assets{links{nodes{directAssetUrl}}}}}}}}"}' \
+    | jq -r '.data.project.releases.nodes[0].assets.links.nodes[0].directAssetUrl')"
   # Fallback to GitHub mirror if GitLab fails
   if [ -z "${libxml2_latest_url}" ] || [ "${libxml2_latest_url}" = "null" ]; then
-    libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://github.com/GNOME/libxml2/tags' \| grep -o "'/GNOME/libxml2/archive/refs/tags/v[0-9.]*.tar.gz'" \| head -1 \| sed -r "'s|/GNOME/libxml2/archive/refs/tags/||')"
+    libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://github.com/GNOME/libxml2/tags' \
+      | grep -o '/GNOME/libxml2/archive/refs/tags/v[0-9.]*.tar.gz' \
+      | head -1 \
+      | sed -r 's|/GNOME/libxml2/archive/refs/tags/||')"
     if [ -n "${libxml2_latest_url}" ]; then
       libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/${libxml2_latest_url}"
     fi
@@ -436,7 +467,8 @@ prepare_c_ares() {
 }
 
 prepare_libssh2() {
-  libssh2_tag="$(retry wget -qO- --compression=auto https://libssh2.org/ \| sed -nr "'s@.*libssh2 ([^<]*).*released on.*@\1@p'")"
+  libssh2_tag="$(retry wget -qO- --compression=auto https://libssh2.org/ \
+    | sed -nr 's@.*libssh2 ([^<]*).*released on.*@\1@p')"
   libssh2_latest_url="https://libssh2.org/download/libssh2-${libssh2_tag}.tar.xz"
   if [ ! -f "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz.part" "${libssh2_latest_url}"
