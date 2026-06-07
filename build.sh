@@ -353,11 +353,7 @@ prepare_ssl() {
 }
 
 prepare_libiconv() {
-  libiconv_tag="$(retry wget -qO- --compression=auto https://ftpmirror.gnu.org/libiconv/ \
-    | grep -i 'libiconv-.*\.tar\.gz' \
-    | sed -r 's/.*libiconv-([^<]+)\.tar\.gz.*/\1/' \
-    | sort -Vr \
-    | head -1)"
+  libiconv_tag="1.19"
   libiconv_latest_url="https://ftpmirror.gnu.org/libiconv/libiconv-${libiconv_tag}.tar.gz"
   if [ ! -f "${DOWNLOADS_DIR}/libiconv-${libiconv_tag}.tar.gz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/libiconv-${libiconv_tag}.tar.gz.part" "${libiconv_latest_url}"
@@ -386,7 +382,7 @@ prepare_libxml2() {
   if [ ! -f "./configure" ]; then
     ./autogen.sh
   fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared --with-libiconv-prefix="${CROSS_PREFIX}"
   make -j$(nproc)
   make install
   libxml2_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/"libxml-*.pc)"
