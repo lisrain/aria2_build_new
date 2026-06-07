@@ -4,9 +4,17 @@ on:
   push:
     branches:
       - "*"
+    paths:
+      - 'build.sh'
+      - '.github/workflows/build_and_release.yml'
+      - 'patch/**'
   pull_request:
     branches:
       - "*"
+    paths:
+      - 'build.sh'
+      - '.github/workflows/build_and_release.yml'
+      - 'patch/**'
   release:
     types:
       - released
