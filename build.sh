@@ -382,7 +382,7 @@ prepare_libxml2() {
   if [ ! -f "./configure" ]; then
     ./autogen.sh
   fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared --with-libiconv-prefix="${CROSS_PREFIX}"
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared CPPFLAGS="-I${CROSS_PREFIX}/include" LDFLAGS="-L${CROSS_PREFIX}/lib"
   make -j$(nproc)
   make install
   libxml2_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/"libxml-*.pc)"
