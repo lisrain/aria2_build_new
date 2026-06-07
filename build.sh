@@ -383,13 +383,24 @@ prepare_libiconv() {
 }
 
 prepare_libxml2() {
-  # Use GitHub tags as primary source since GitLab GraphQL query has quoting issues with retry/eval
-  libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://github.com/GNOME/libxml2/tags' \
-    | grep -o '/GNOME/libxml2/archive/refs/tags/v[0-9.]*.tar.gz' \
-    | head -1 \
-    | sed -r 's|/GNOME/libxml2/archive/refs/tags/||')"
+  # Use GitHub tags with authentication to avoid API rate limiting
+  if [ -n "${GITHUB_TOKEN}" ]; then
+    libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://api.github.com/repos/GNOME/libxml2/tags' \
+      --header="Authorization: token ${GITHUB_TOKEN}" \
+      | jq -r '.[0].name' \
+      | sed -r 's/^v//')"
+  else
+    libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://github.com/GNOME/libxml2/tags' \
+      | grep -o '/GNOME/libxml2/archive/refs/tags/v[0-9.]*.tar.gz' \
+      | head -1 \
+      | sed -r 's|/GNOME/libxml2/archive/refs/tags/||')"
+  fi
   if [ -n "${libxml2_latest_url}" ]; then
-    libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/${libxml2_latest_url}"
+    if [[ "${libxml2_latest_url}" =~ ^v ]]; then
+      libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/${libxml2_latest_url}.tar.gz"
+    else
+      libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/v${libxml2_latest_url}.tar.gz"
+    fi
   fi
   libxml2_tag="$(echo "${libxml2_latest_url}" | sed -r 's/.*libxml2-(.+)\.tar.*/\1/')"
   libxml2_filename="$(echo "${libxml2_latest_url}" | sed -r 's/.*(libxml2-(.+\.tar.*))/\1/')"
