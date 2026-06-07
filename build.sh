@@ -11,33 +11,39 @@ set -o pipefail
 # export CROSS_HOST="${CROSS_HOST:-arm-unknown-linux-musleabi}"
 # value from openssl source: ./Configure LIST
 case "${CROSS_HOST}" in
-arm-*linux*)
-  export OPENSSL_COMPILER=linux-armv4
-  ;;
-aarch64-*linux*)
-  export OPENSSL_COMPILER=linux-aarch64
-  ;;
-mips-*linux* | mipsel-*linux*)
-  export OPENSSL_COMPILER=linux-mips32
-  ;;
-mips64-*linux*)
-  export OPENSSL_COMPILER=linux64-mips64
-  ;;
-x86_64-*linux*)
-  export OPENSSL_COMPILER=linux-x86_64
-  ;;
-i?86-*linux*)
-  export OPENSSL_COMPILER=linux-x86
-  ;;
-s390x-*linux*)
-  export OPENSSL_COMPILER=linux64-s390x
-  ;;
-loongarch64-*linux*)
-  export OPENSSL_COMPILER=linux64-loongarch64
-  ;;
-*)
-  export OPENSSL_COMPILER=gcc
-  ;;
+  arm*linux*)
+    export OPENSSL_COMPILER=linux-armv4
+    ;;
+  aarch64*linux*)
+    export OPENSSL_COMPILER=linux-aarch64
+    ;;
+  mips64*linux*)
+    export OPENSSL_COMPILER=linux64-mips64
+    ;;
+  mips*linux* | mipsel*linux*)
+    export OPENSSL_COMPILER=linux-mips32
+    ;;
+  x86_64*linux*)
+    export OPENSSL_COMPILER=linux-x86_64
+    ;;
+  i?86*linux*)
+    export OPENSSL_COMPILER=linux-x86
+    ;;
+  s390x*linux*)
+    export OPENSSL_COMPILER=linux64-s390x
+    ;;
+  loongarch64*linux*)
+    export OPENSSL_COMPILER=linux64-loongarch64
+    ;;
+  x86_64*mingw*)
+    export OPENSSL_COMPILER=mingw64
+    ;;
+  i686*mingw*)
+    export OPENSSL_COMPILER=mingw
+    ;;
+  *)
+    export OPENSSL_COMPILER=gcc
+    ;;
 esac
 
 export USE_ZLIB_NG="${USE_ZLIB_NG:-1}"
@@ -114,29 +120,29 @@ BUILD_ARCH="$(gcc -dumpmachine)"
 TARGET_ARCH="${CROSS_HOST%%-*}"
 TARGET_HOST="${CROSS_HOST#*-}"
 case "${TARGET_ARCH}" in
-"armel"*)
-  TARGET_ARCH=armel
-  ;;
-"arm"*)
-  TARGET_ARCH=arm
-  ;;
-i?86*)
-  TARGET_ARCH=i386
-  ;;
+  "armel"*)
+    TARGET_ARCH=armel
+    ;;
+  "arm"*)
+    TARGET_ARCH=arm
+    ;;
+  i?86*)
+    TARGET_ARCH=i386
+    ;;
 esac
 case "${TARGET_HOST}" in
-*"mingw"*)
-  TARGET_HOST=Windows
-  apt update
-  apt install -y wine
-  export WINEPREFIX=/tmp/
-  RUNNER_CHECKER="wine"
-  ;;
-*)
-  TARGET_HOST=Linux
-  apt install -y "qemu-user"
-  RUNNER_CHECKER="qemu-${TARGET_ARCH}"
-  ;;
+  *"mingw"*)
+    TARGET_HOST=Windows
+    apt update
+    apt install -y wine
+    export WINEPREFIX=/tmp/
+    RUNNER_CHECKER="wine"
+    ;;
+  *)
+    TARGET_HOST=Linux
+    apt install -y "qemu-user"
+    RUNNER_CHECKER="qemu-${TARGET_ARCH}"
+    ;;
 esac
 
 export PATH="${CROSS_ROOT}/bin:${PATH}"
@@ -144,6 +150,10 @@ export CROSS_PREFIX="${CROSS_ROOT}/${CROSS_HOST}"
 export PKG_CONFIG_LIBDIR="${CROSS_PREFIX}/lib64/pkgconfig:${CROSS_PREFIX}/lib/pkgconfig"
 export LDFLAGS="-L${CROSS_PREFIX}/lib64 -L${CROSS_PREFIX}/lib -s -static --static"
 export CFLAGS="-I${CROSS_PREFIX}/include"
+export CC="${CROSS_HOST}-cc"
+export CXX="${CROSS_HOST}-c++"
+export CPP="${CROSS_HOST}-cpp"
+
 SELF_DIR="$(dirname "$(realpath "${0}")")"
 BUILD_INFO="${SELF_DIR}/build_info.md"
 
@@ -162,22 +172,17 @@ else
   SSL=OpenSSL
 fi
 
-
-if [ x"${TARGET_HOST}" = xWindows ]; then
-   echo "## Build Info - ${CROSS_HOST} With WinTLS and ${ZLIB}" >"${BUILD_INFO}"
- else
-   echo "## Build Info - ${CROSS_HOST} With ${SSL} and ${ZLIB}" >"${BUILD_INFO}"
-fi
+echo "## Build Info - ${CROSS_HOST} with ${SSL} and ${ZLIB}" >"${BUILD_INFO}"
 echo "Building using these dependencies:" >>"${BUILD_INFO}"
 
 prepare_cmake() {
   if ! which cmake &>/dev/null; then
-    cmake_latest_ver="4.3.3"
+    cmake_latest_ver="$(retry wget -qO- --compression=auto https://cmake.org/download/ \| grep "'Latest Release'" \| sed -r "'s/.*Latest Release\s*\((.+)\).*/\1/'" \| head -1)"
     cmake_binary_url="https://github.com/Kitware/CMake/releases/download/v${cmake_latest_ver}/cmake-${cmake_latest_ver}-linux-x86_64.tar.gz"
     cmake_sha256_url="https://github.com/Kitware/CMake/releases/download/v${cmake_latest_ver}/cmake-${cmake_latest_ver}-SHA-256.txt"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-      cmake_binary_url="https://ghfast.top/${cmake_binary_url}"
-      cmake_sha256_url="https://ghfast.top/${cmake_sha256_url}"
+      cmake_binary_url="https://gh-proxy.com/${cmake_binary_url}"
+      cmake_sha256_url="https://gh-proxy.com/${cmake_sha256_url}"
     fi
     if [ -f "${DOWNLOADS_DIR}/cmake-${cmake_latest_ver}-linux-x86_64.tar.gz" ]; then
       cd "${DOWNLOADS_DIR}"
@@ -196,10 +201,10 @@ prepare_cmake() {
 
 prepare_ninja() {
   if ! which ninja &>/dev/null; then
-    ninja_ver="v1.13.2"
+    ninja_ver="$(retry wget -qO- --compression=auto https://ninja-build.org/ \| grep "'The last Ninja release is'" \| sed -r "'s@.*<b>(.+)</b>.*@\1@'" \| head -1)"
     ninja_binary_url="https://github.com/ninja-build/ninja/releases/download/${ninja_ver}/ninja-linux.zip"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-      ninja_binary_url="https://ghfast.top/${ninja_binary_url}"
+      ninja_binary_url="https://gh-proxy.com/${ninja_binary_url}"
     fi
     if [ ! -f "${DOWNLOADS_DIR}/ninja-${ninja_ver}-linux.zip" ]; then
       rm -f "${DOWNLOADS_DIR}/ninja-${ninja_ver}-linux.zip.part"
@@ -213,10 +218,10 @@ prepare_ninja() {
 
 prepare_zlib() {
   if [ x"${USE_ZLIB_NG}" = x"1" ]; then
-    zlib_ng_latest_tag="2.3.3"
+    zlib_ng_latest_tag="$(retry wget -qO- --compression=auto https://api.github.com/repos/zlib-ng/zlib-ng/releases \| jq -r "'.[0].tag_name'")"
     zlib_ng_latest_url="https://github.com/zlib-ng/zlib-ng/archive/refs/tags/${zlib_ng_latest_tag}.tar.gz"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-      zlib_ng_latest_url="https://ghfast.top/${zlib_ng_latest_url}"
+      zlib_ng_latest_url="https://gh-proxy.com/${zlib_ng_latest_url}"
     fi
     if [ ! -f "${DOWNLOADS_DIR}/zlib-ng-${zlib_ng_latest_tag}.tar.gz" ]; then
       retry wget -cT10 -O "${DOWNLOADS_DIR}/zlib-ng-${zlib_ng_latest_tag}.tar.gz.part" "${zlib_ng_latest_url}"
@@ -232,9 +237,9 @@ prepare_zlib() {
       -DZLIB_COMPAT=ON \
       -DCMAKE_SYSTEM_NAME="${TARGET_HOST}" \
       -DCMAKE_INSTALL_PREFIX="${CROSS_PREFIX}" \
-      -DCMAKE_C_COMPILER="${CROSS_HOST}-gcc" \
+      -DCMAKE_C_COMPILER="${CROSS_HOST}-cc" \
       -DCMAKE_SYSTEM_PROCESSOR="${TARGET_ARCH}" \
-      -DWITH_GTEST=OFF
+      -DBUILD_TESTING=OFF
     cmake --build build
     cmake --install build
     zlib_ng_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/zlib.pc")"
@@ -242,10 +247,7 @@ prepare_zlib() {
     # Fix mingw build sharedlibdir lost issue
     sed -i 's@^sharedlibdir=.*@sharedlibdir=${libdir}@' "${CROSS_PREFIX}/lib/pkgconfig/zlib.pc"
   else
-    zlib_tag="$(retry wget -qO- --compression=auto https://zlib.net/ \
-      | grep -i '<FONT.*FONT>' \
-      | sed -r 's/.*zlib\s*([^<]+).*/\1/' \
-      | head -1)"
+    zlib_tag="$(retry wget -qO- --compression=auto https://zlib.net/ \| grep -i "'<FONT.*FONT>'" \| sed -r "'s/.*zlib\s*([^<]+).*/\1/'" \| head -1)"
     zlib_latest_url="https://zlib.net/zlib-${zlib_tag}.tar.xz"
     if [ ! -f "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz" ]; then
       retry wget -cT10 -O "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz.part" "${zlib_latest_url}"
@@ -268,23 +270,15 @@ prepare_zlib() {
 
 prepare_xz() {
   # Download from github release (now breakdown)
-  # xz_release_info="$(retry wget -qO- --compression=auto https://api.github.com/repos/tukaani-project/xz/releases \
-  #   | jq -r '[.[] | select(.prerelease == false)][0]')"
+  # xz_release_info="$(retry wget -qO- --compression=auto https://api.github.com/repos/tukaani-project/xz/releases \| jq -r "'[.[] | select(.prerelease == false)][0]'")"
   # xz_tag="$(printf '%s' "${xz_release_info}" | jq -r '.tag_name')"
   # xz_archive_name="$(printf '%s' "${xz_release_info}" | jq -r '.assets[].name | select(endswith("tar.xz"))')"
   # xz_latest_url="https://github.com/tukaani-project/xz/releases/download/${xz_tag}/${xz_archive_name}"
   # if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-  #   xz_latest_url="https://ghfast.top/${xz_latest_url}"
+  #   xz_latest_url="https://gh-proxy.com/${xz_latest_url}"
   # fi
-  # Download from sourceforge with error handling
-  xz_tag="$(retry wget -qO- --compression=auto https://sourceforge.net/projects/lzmautils/files/ \
-    | grep -i 'span class="sub-label"' \
-    | head -1 \
-    | sed -r 's/.*xz-(.+)\.tar\.gz.*/\1/')"
-  if [ -z "${xz_tag}" ]; then
-    echo "Failed to get xz version from sourceforge, using fallback version 5.8.1"
-    xz_tag="5.8.1"
-  fi
+  # Download from sourceforge
+  xz_tag="$(retry wget -qO- --compression=auto https://sourceforge.net/projects/lzmautils/files/ \| grep -i \'span class=\"sub-label\"\' \| head -1 \| sed -r "'s/.*xz-(.+)\.tar\.gz.*/\1/'")"
   xz_latest_url="https://sourceforge.net/projects/lzmautils/files/xz-${xz_tag}.tar.xz"
   if [ ! -f "${DOWNLOADS_DIR}/xz-${xz_tag}.tar.xz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/xz-${xz_tag}.tar.xz.part" "${xz_latest_url}"
@@ -293,7 +287,7 @@ prepare_xz() {
   mkdir -p "/usr/src/xz-${xz_tag}"
   tar -Jxf "${DOWNLOADS_DIR}/xz-${xz_tag}.tar.xz" --strip-components=1 -C "/usr/src/xz-${xz_tag}"
   cd "/usr/src/xz-${xz_tag}"
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --enable-static --disable-shared
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --enable-static --disable-shared --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-scripts --disable-doc
   make -j$(nproc)
   make install
   xz_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/liblzma.pc")"
@@ -301,59 +295,50 @@ prepare_xz() {
 }
 
 prepare_ssl() {
-  # Windows will use Wintls, not openssl
-  if [ x"${TARGET_HOST}" != xWindows ]; then
-    if [ x"${USE_LIBRESSL}" = x1 ]; then
-      # libressl
-      libressl_tag="$(retry wget -qO- --compression=auto https://www.libressl.org/index.html \
-        | grep 'release is' \
-        | tail -1 \
-        | sed -r 's/.* (.+)<.*>$/\1/')"
-      libressl_latest_url="https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-${libressl_tag}.tar.gz"
-      if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-        libressl_latest_url="https://mirror.sjtu.edu.cn/OpenBSD/LibreSSL/libressl-${libressl_tag}.tar.gz"
-      fi
-      if [ ! -f "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz" ]; then
-        retry wget -cT10 -O "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz.part" "${libressl_latest_url}"
-        mv -fv "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz.part" "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz"
-      fi
-      mkdir -p "/usr/src/libressl-${libressl_tag}"
-      tar -zxf "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz" --strip-components=1 -C "/usr/src/libressl-${libressl_tag}"
-      cd "/usr/src/libressl-${libressl_tag}"
-      if [ ! -f "./configure" ]; then
-        ./autogen.sh
-      fi
-      ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --enable-static --disable-shared --with-openssldir=/etc/ssl
-      make -j$(nproc)
-      make install_sw
-      libressl_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/openssl.pc")"
-      echo "- libressl: ${libressl_ver}, source: ${libressl_latest_url:-cached libressl}" >>"${BUILD_INFO}"
-    else
-      # openssl
-      openssl_ver="4.0.0"
-      openssl_filename="openssl-${openssl_ver}.tar.gz"
-      openssl_latest_url="https://github.com/openssl/openssl/releases/download/openssl-${openssl_ver}/${openssl_filename}"
-      if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-        openssl_latest_url="https://ghfast.top/${openssl_latest_url}"
-      fi
-      if [ ! -f "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz" ]; then
-        retry wget -cT10 -O "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz.part" "${openssl_latest_url}"
-        mv -fv "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz.part" "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz"
-      fi
-      mkdir -p "/usr/src/openssl-${openssl_ver}"
-      tar -zxf "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz" --strip-components=1 -C "/usr/src/openssl-${openssl_ver}"
-      cd "/usr/src/openssl-${openssl_ver}"
-      ./Configure -static --cross-compile-prefix="${CROSS_HOST}-" --prefix="${CROSS_PREFIX}" "${OPENSSL_COMPILER}" --openssldir=/etc/ssl
-      make -j$(nproc)
-      make install_sw
-      openssl_ver="$(grep Version: "${CROSS_PREFIX}"/lib*/pkgconfig/openssl.pc)"
-      echo "- openssl: ${openssl_ver}, source: ${openssl_latest_url:-cached openssl}" >>"${BUILD_INFO}"
+  if [ x"${USE_LIBRESSL}" = x1 ]; then
+    # libressl
+    libressl_tag="$(retry wget -qO- --compression=auto https://www.libressl.org/index.html \| grep "'release is'" \| tail -1 \| sed -r "'s/.* (.+)<.*>$/\1/'")"
+    libressl_latest_url="https://cloudflare.cdn.openbsd.org/pub/OpenBSD/LibreSSL/libressl-${libressl_tag}.tar.gz"
+    if [ ! -f "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz" ]; then
+      retry wget -cT10 -O "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz.part" "${libressl_latest_url}"
+      mv -fv "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz.part" "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz"
     fi
+    mkdir -p "/usr/src/libressl-${libressl_tag}"
+    tar -zxf "${DOWNLOADS_DIR}/libressl-${libressl_tag}.tar.gz" --strip-components=1 -C "/usr/src/libressl-${libressl_tag}"
+    cd "/usr/src/libressl-${libressl_tag}"
+    if [ ! -f "./configure" ]; then
+      ./autogen.sh
+    fi
+    ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --enable-static --disable-shared --disable-tests --with-openssldir=/etc/ssl
+    make -j$(nproc)
+    make install_sw
+    libressl_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/openssl.pc")"
+    echo "- libressl: ${libressl_ver}, source: ${libressl_latest_url:-cached libressl}" >>"${BUILD_INFO}"
+  else
+    # openssl
+    openssl_filename="$(retry wget -qO- --compression=auto https://openssl-library.org/source/ \| grep -o "'>openssl-3\(\.[0-9]*\)*tar.gz<'" \| grep -o "'[^>]*.tar.gz'" \| sort -nr \| head -1)"
+    openssl_ver="$(echo "${openssl_filename}" | sed -r 's/openssl-(.+)\.tar\.gz/\1/')"
+    openssl_latest_url="https://github.com/openssl/openssl/releases/download/openssl-${openssl_ver}/${openssl_filename}"
+    if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
+      openssl_latest_url="https://gh-proxy.com/${openssl_latest_url}"
+    fi
+    if [ ! -f "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz" ]; then
+      retry wget -cT10 -O "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz.part" "${openssl_latest_url}"
+      mv -fv "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz.part" "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz"
+    fi
+    mkdir -p "/usr/src/openssl-${openssl_ver}"
+    tar -zxf "${DOWNLOADS_DIR}/openssl-${openssl_ver}.tar.gz" --strip-components=1 -C "/usr/src/openssl-${openssl_ver}"
+    cd "/usr/src/openssl-${openssl_ver}"
+    CC="cc" ./Configure -static --cross-compile-prefix="${CROSS_HOST}-" --prefix="${CROSS_PREFIX}" no-apps "${OPENSSL_COMPILER}" --openssldir=/etc/ssl
+    make -j$(nproc)
+    make install_sw
+    openssl_ver="$(grep Version: "${CROSS_PREFIX}"/lib*/pkgconfig/openssl.pc)"
+    echo "- openssl: ${openssl_ver}, source: ${openssl_latest_url:-cached openssl}" >>"${BUILD_INFO}"
   fi
 }
 
 prepare_libiconv() {
-  libiconv_tag="1.19"
+  libiconv_tag="$(retry wget -qO- --compression=auto https://ftpmirror.gnu.org/libiconv/ \| grep -i "'libiconv-.*\.tar\.gz'" \| sed -r "'s/.*libiconv-([^<]+)\.tar\.gz.*/\1/'" \| sort -Vr \| head -1)"
   libiconv_latest_url="https://ftpmirror.gnu.org/libiconv/libiconv-${libiconv_tag}.tar.gz"
   if [ ! -f "${DOWNLOADS_DIR}/libiconv-${libiconv_tag}.tar.gz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/libiconv-${libiconv_tag}.tar.gz.part" "${libiconv_latest_url}"
@@ -364,30 +349,14 @@ prepare_libiconv() {
   cd "/usr/src/libiconv-${libiconv_tag}"
   ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --enable-static --disable-shared
   make -j$(nproc)
-  make install
-  # 手动创建 libiconv 的 pkg-config 文件（如果不存在）
-  if [ ! -f "${CROSS_PREFIX}/lib/pkgconfig/libiconv.pc" ]; then
-    mkdir -p "${CROSS_PREFIX}/lib/pkgconfig"
-    cat > "${CROSS_PREFIX}/lib/pkgconfig/libiconv.pc" << EOF
-prefix=${CROSS_PREFIX}
-exec_prefix=\${prefix}
-libdir=\${exec_prefix}/lib
-includedir=\${prefix}/include
-
-Name: libiconv
-Description: GNU libiconv
-Version: ${libiconv_tag}
-Libs: -L\${libdir} -liconv
-Cflags: -I\${includedir}
-EOF
-  fi
+  make install-lib
   echo "- libiconv: ${libiconv_tag}, source: ${libiconv_latest_url:-cached libiconv}" >>"${BUILD_INFO}"
 }
 
 prepare_libxml2() {
-  libxml2_tag="2.15.3"
-  libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/v${libxml2_tag}.tar.gz"
-  libxml2_filename="libxml2-${libxml2_tag}.tar.gz"
+  libxml2_latest_url="$(retry wget -qO- --compression=auto 'https://gitlab.gnome.org/api/graphql' --header="'Content-Type: application/json'" --post-data="'{\"query\":\"query {project(fullPath:\\\"GNOME/libxml2\\\"){releases(sort:RELEASED_AT_DESC){nodes{assets{links{nodes{directAssetUrl}}}}}}}\"}'" \| jq -r "'.data.project.releases.nodes | map(select(.assets.links.nodes | length > 0)) | .[0].assets.links.nodes[0].directAssetUrl'")"
+  libxml2_tag="$(echo "${libxml2_latest_url}" | sed -r 's/.*libxml2-(.+).tar.*/\1/')"
+  libxml2_filename="$(echo "${libxml2_latest_url}" | sed -r 's/.*(libxml2-(.+).tar.*)/\1/')"
   if [ ! -f "${DOWNLOADS_DIR}/${libxml2_filename}" ]; then
     retry wget -c -O "${DOWNLOADS_DIR}/${libxml2_filename}.part" "${libxml2_latest_url}"
     mv -fv "${DOWNLOADS_DIR}/${libxml2_filename}.part" "${DOWNLOADS_DIR}/${libxml2_filename}"
@@ -395,12 +364,7 @@ prepare_libxml2() {
   mkdir -p "/usr/src/libxml2-${libxml2_tag}"
   tar -axf "${DOWNLOADS_DIR}/${libxml2_filename}" --strip-components=1 -C "/usr/src/libxml2-${libxml2_tag}"
   cd "/usr/src/libxml2-${libxml2_tag}"
-  if [ ! -f "./configure" ]; then
-    ./autogen.sh
-  fi
-  # 确保 libiconv 可以被找到
-  export PKG_CONFIG_PATH="${CROSS_PREFIX}/lib/pkgconfig:${CROSS_PREFIX}/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared --with-iconv="${CROSS_PREFIX}"
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared
   make -j$(nproc)
   make install
   libxml2_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/"libxml-*.pc)"
@@ -408,10 +372,10 @@ prepare_libxml2() {
 }
 
 prepare_sqlite() {
-  sqlite_tag="3.53.2"
+  sqlite_tag="$(retry wget -qO- --compression=auto https://www.sqlite.org/index.html \| sed -nr "'s/.*>Version (.+)<.*/\1/p'")"
   sqlite_latest_url="https://github.com/sqlite/sqlite/archive/refs/tags/version-${sqlite_tag}.tar.gz"
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-    sqlite_latest_url="https://ghfast.top/${sqlite_latest_url}"
+    sqlite_latest_url="https://gh-proxy.com/${sqlite_latest_url}"
   fi
   if [ ! -f "${DOWNLOADS_DIR}/sqlite-${sqlite_tag}.tar.gz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/sqlite-${sqlite_tag}.tar.gz.part" "${sqlite_latest_url}"
@@ -434,11 +398,15 @@ prepare_sqlite() {
 }
 
 prepare_c_ares() {
-  cares_latest_tag="v1.34.6"
+  # cares_latest_tag="$(retry wget -qO- --compression=auto https://api.github.com/repos/c-ares/c-ares/releases \| jq -r "'.[0].tag_name'")"
+  # waiting for new release to resolve: https://github.com/c-ares/c-ares/issues/1069
+  cares_latest_tag="v1.34.5"
   cares_ver="${cares_latest_tag#v}"
   cares_latest_url="https://github.com/c-ares/c-ares/releases/download/${cares_latest_tag}/c-ares-${cares_ver}.tar.gz"
+  # cares_ver="main"
+  # cares_latest_url="https://github.com/c-ares/c-ares/archive/refs/heads/main.tar.gz"
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-    cares_latest_url="https://ghfast.top/${cares_latest_url}"
+    cares_latest_url="https://gh-proxy.com/${cares_latest_url}"
   fi
   if [ ! -f "${DOWNLOADS_DIR}/c-ares-${cares_ver}.tar.gz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/c-ares-${cares_ver}.tar.gz.part" "${cares_latest_url}"
@@ -458,8 +426,7 @@ prepare_c_ares() {
 }
 
 prepare_libssh2() {
-  libssh2_tag="$(retry wget -qO- --compression=auto https://libssh2.org/ \
-    | sed -nr 's@.*libssh2 ([^<]*).*released on.*@\1@p')"
+  libssh2_tag="$(retry wget -qO- --compression=auto https://libssh2.org/ \| sed -nr "'s@.*libssh2 ([^<]*).*released on.*@\1@p'")"
   libssh2_latest_url="https://libssh2.org/download/libssh2-${libssh2_tag}.tar.xz"
   if [ ! -f "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz" ]; then
     retry wget -cT10 -O "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz.part" "${libssh2_latest_url}"
@@ -468,7 +435,7 @@ prepare_libssh2() {
   mkdir -p "/usr/src/libssh2-${libssh2_tag}"
   tar -Jxf "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz" --strip-components=1 -C "/usr/src/libssh2-${libssh2_tag}"
   cd "/usr/src/libssh2-${libssh2_tag}"
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --disable-examples-build
   make -j$(nproc)
   make install
   libssh2_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/libssh2.pc")"
@@ -484,7 +451,7 @@ build_aria2() {
     if [ -f "${DOWNLOADS_DIR}/aria2-${aria2_tag}.tar.gz" ]; then
       cached_file_ts="$(stat -c '%Y' "${DOWNLOADS_DIR}/aria2-${aria2_tag}.tar.gz")"
       current_ts="$(date +%s)"
-      if [ "$((${current_ts} - "${cached_file_ts}"))" -gt 86400 ]; then
+      if [ "$((current_ts - "${cached_file_ts}"))" -gt 86400 ]; then
         echo "Delete expired aria2 archive file cache..."
         rm -f "${DOWNLOADS_DIR}/aria2-${aria2_tag}.tar.gz"
       fi
@@ -497,7 +464,7 @@ build_aria2() {
     aria2_latest_url="https://github.com/aria2/aria2/archive/master.tar.gz"
   fi
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-    aria2_latest_url="https://ghfast.top/${aria2_latest_url}"
+    aria2_latest_url="https://gh-proxy.com/${aria2_latest_url}"
   fi
 
   if [ ! -f "${DOWNLOADS_DIR}/aria2-${aria2_tag}.tar.gz" ]; then
@@ -507,30 +474,21 @@ build_aria2() {
   mkdir -p "/usr/src/aria2-${aria2_tag}"
   tar -zxf "${DOWNLOADS_DIR}/aria2-${aria2_tag}.tar.gz" --strip-components=1 -C "/usr/src/aria2-${aria2_tag}"
   cd "/usr/src/aria2-${aria2_tag}"
-  #patch
-  ls -la "${SELF_DIR}/patch"
+  # Apply patches
   if [ -d "${SELF_DIR}/patch" ]; then
     for patch_file in ${SELF_DIR}/patch/*.patch; do
+      echo "Applying patch: ${patch_file}"
       patch -p1 < "$patch_file" || exit 1
     done
   fi
   if [ ! -f ./configure ]; then
     autoreconf -i
   fi
-  if [ x"${TARGET_HOST}" = xWindows ]; then
-    ARIA2_EXT_CONF='--without-openssl --without-wintls --with-libcares'
-  else
-    ARIA2_EXT_CONF='--with-openssl --without-gnutls --with-libcares'
-  fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF} --without-libxml2
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --without-wintls ARIA2_STATIC=yes
   make -j$(nproc)
   make install
   echo "- aria2: source: ${aria2_latest_url:-cached aria2}" >>"${BUILD_INFO}"
   echo >>"${BUILD_INFO}"
-  #使用 file 命令验证二进制文件的架构 
-  file "${CROSS_PREFIX}"/bin/aria2c*
-  #使用 ldd 命令验证是否为静态链接，如果输出为 Not a dynamic executable，则表示 aria2c 已经完全静态化。
-  ldd "${CROSS_PREFIX}"/bin/aria2c* || echo "Not a dynamic executable"
 }
 
 get_build_info() {
@@ -542,10 +500,6 @@ get_build_info() {
   echo "aria2 version info:" >>"${BUILD_INFO}"
   echo '```txt' >>"${BUILD_INFO}"
   echo "${ARIA2_VER_INFO}" >>"${BUILD_INFO}"
-  echo '```' >>"${BUILD_INFO}"
-  echo "aria2 binary info:" >>"${BUILD_INFO}"
-  echo '```txt' >>"${BUILD_INFO}"
-  echo "$(file ${CROSS_PREFIX}/bin/aria2c*)" >> "${BUILD_INFO}"
   echo '```' >>"${BUILD_INFO}"
 }
 
@@ -562,6 +516,8 @@ prepare_ninja
 prepare_zlib
 prepare_xz
 prepare_ssl
+prepare_libiconv
+prepare_libxml2
 prepare_sqlite
 prepare_c_ares
 prepare_libssh2
@@ -569,7 +525,14 @@ build_aria2
 
 get_build_info
 # mips test will hang, I don't know why. So I just ignore test failures.
-# test_build
+case "${CROSS_HOST}" in
+  mips*linux* | mips64*linux*)
+    echo "Skipping test_build for MIPS architecture"
+    ;;
+  *)
+    test_build
+    ;;
+esac
 
 # get release
 cp -fv "${CROSS_PREFIX}/bin/"aria2* "${SELF_DIR}"
