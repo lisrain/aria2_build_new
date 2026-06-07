@@ -519,6 +519,8 @@ build_aria2() {
   fi
   if [ x"${TARGET_HOST}" = xWindows ]; then
     ARIA2_EXT_CONF='--without-openssl --without-wintls --with-libcares'
+  else
+    ARIA2_EXT_CONF='--with-openssl --without-gnutls --with-libcares'
   fi
   ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF} --without-libxml2
   make -j$(nproc)
