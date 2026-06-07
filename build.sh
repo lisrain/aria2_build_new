@@ -400,7 +400,7 @@ prepare_libxml2() {
   fi
   # 确保 libiconv 可以被找到
   export PKG_CONFIG_PATH="${CROSS_PREFIX}/lib/pkgconfig:${CROSS_PREFIX}/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-silent-rules --without-python --without-icu --enable-static --disable-shared --with-iconv="${CROSS_PREFIX}"
   make -j$(nproc)
   make install
   libxml2_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/"libxml-*.pc)"
@@ -520,7 +520,7 @@ build_aria2() {
   if [ x"${TARGET_HOST}" = xWindows ]; then
     ARIA2_EXT_CONF='--without-openssl --without-wintls --with-libcares'
   fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF} --without-libxml2 --disable-bittorrent --disable-metalink
+  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF} --without-libxml2
   make -j$(nproc)
   make install
   echo "- aria2: source: ${aria2_latest_url:-cached aria2}" >>"${BUILD_INFO}"
