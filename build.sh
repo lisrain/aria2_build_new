@@ -461,7 +461,7 @@ build_aria2() {
   if [ -n "${ARIA2_VER}" ]; then
     aria2_latest_url="https://github.com/aria2/aria2/releases/download/release-${ARIA2_VER}/aria2-${ARIA2_VER}.tar.gz"
   else
-    aria2_latest_url="https://github.com/aria2/aria2/archive/master.tar.gz"
+    aria2_latest_url="https://github.com/aria2/aria2/archive/refs/heads/master.tar.gz"
   fi
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
     aria2_latest_url="https://gh-proxy.com/${aria2_latest_url}"
