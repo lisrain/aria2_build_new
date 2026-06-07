@@ -375,8 +375,7 @@ prepare_libiconv() {
 prepare_libxml2() {
   libxml2_tag="2.15.3"
   libxml2_latest_url="https://github.com/GNOME/libxml2/archive/refs/tags/v${libxml2_tag}.tar.gz"
-  libxml2_tag="$(echo "${libxml2_latest_url}" | sed -r 's/.*libxml2-(.+)\.tar.*/\1/')"
-  libxml2_filename="$(echo "${libxml2_latest_url}" | sed -r 's/.*(libxml2-(.+\.tar.*))/\1/')"
+  libxml2_filename="libxml2-${libxml2_tag}.tar.gz"
   if [ ! -f "${DOWNLOADS_DIR}/${libxml2_filename}" ]; then
     retry wget -c -O "${DOWNLOADS_DIR}/${libxml2_filename}.part" "${libxml2_latest_url}"
     mv -fv "${DOWNLOADS_DIR}/${libxml2_filename}.part" "${DOWNLOADS_DIR}/${libxml2_filename}"
