@@ -29,7 +29,7 @@ jobs:
       - name: Delete Continuous Release
         run: gh release delete continuous --cleanup-tag || true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_PAT }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
       - name: Create Prerelease Tag
         id: create_prerelease_tag
         run: |
@@ -39,7 +39,7 @@ jobs:
           # Make sure draft is false
           gh release edit continuous --draft=false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_PAT }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
   static-build-linux:
     runs-on: ubuntu-latest
