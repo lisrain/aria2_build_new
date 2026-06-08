@@ -108,6 +108,7 @@ jobs:
             Built with latest versions: OpenSSL, zlib-ng, c-ares, libssh2, and more.
             "
           echo "✅ Draft release created"
+          echo "Release URL: https://github.com/lisrain/aria2_build_new/releases/tag/v1.37.0"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
