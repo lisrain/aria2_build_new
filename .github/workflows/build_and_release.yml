@@ -82,8 +82,26 @@ jobs:
           git tag -a v1.37.0 -m "Aria2 v1.37.0"
           git push origin v1.37.0
           echo "✅ Tag v1.37.0 created and pushed"
-          echo "⏳ Waiting 10s for GitHub to sync tag..."
-          sleep 10
+
+          # Wait for tag to be visible on remote (max 60s, check every 5s)
+          echo "⏳ Waiting for tag to be visible on remote..."
+          TRIES=12
+          SLEEP=5
+          FOUND=0
+          for i in $(seq 1 $TRIES); do
+            if git ls-remote --tags origin refs/tags/v1.37.0 | grep -q "refs/tags/v1.37.0"; then
+              echo "✅ Tag v1.37.0 is now visible on remote"
+              FOUND=1
+              break
+            fi
+            echo "⏳ Attempt $i/$TRIES: Tag not yet visible, waiting ${SLEEP}s..."
+            sleep $SLEEP
+          done
+
+          if [ "$FOUND" -ne 1 ]; then
+            echo "❌ Tag v1.37.0 not visible on remote after timeout; aborting release creation."
+            exit 1
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
