@@ -37,9 +37,15 @@ jobs:
             if [ "$STATUS" = "in_progress" ] || [ "$STATUS" = "queued" ] || [ "$STATUS" = "waiting" ]; then
               echo "⚠️ Stopping running workflow #${RUN_ID} (status: ${STATUS})..."
               gh run cancel $RUN_ID || true
-              sleep 5
-              gh run delete $RUN_ID || true
-              echo "✅ Stopped and deleted workflow #${RUN_ID}"
+              sleep 10
+              # Try to delete, don't fail if it doesn't work
+              if gh run delete $RUN_ID 2>/dev/null; then
+                echo "✅ Stopped and deleted workflow #${RUN_ID}"
+              else
+                echo "⚠️ Could not delete workflow #${RUN_ID} yet (may still be processing), continuing..."
+                sleep 5
+                gh run delete $RUN_ID || true
+              fi
             elif [ "$CONCLUSION" = "failure" ] || [ "$CONCLUSION" = "cancelled" ] || [ "$CONCLUSION" = "timed_out" ]; then
               echo "🗑️ Deleting failed workflow #${RUN_ID} (conclusion: ${CONCLUSION})..."
               gh run delete $RUN_ID || true
@@ -63,17 +69,6 @@ jobs:
           git tag -d v1.37.0 || true
           git push origin :refs/tags/v1.37.0 || true
           echo "✅ Old release cleanup completed"
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-      - name: Create tag
-        run: |
-          echo "🏷️ Creating tag v1.37.0..."
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git tag -a v1.37.0 -m "Aria2 v1.37.0"
-          git push origin v1.37.0
-          echo "✅ Tag v1.37.0 created"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
