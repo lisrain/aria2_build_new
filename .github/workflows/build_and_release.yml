@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Check and cleanup previous runs
         run: |
@@ -69,6 +71,19 @@ jobs:
           git tag -d v1.37.0 || true
           git push origin :refs/tags/v1.37.0 || true
           echo "✅ Old release cleanup completed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Create and push tag
+        run: |
+          echo "🏷️ Creating tag v1.37.0..."
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a v1.37.0 -m "Aria2 v1.37.0"
+          git push origin v1.37.0
+          echo "✅ Tag v1.37.0 created and pushed"
+          echo "⏳ Waiting 10s for GitHub to sync tag..."
+          sleep 10
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
