@@ -47,6 +47,7 @@ case "${CROSS_HOST}" in
 esac
 
 export USE_ZLIB_NG="${USE_ZLIB_NG:-1}"
+export USE_OFFICIAL_MINGW="${USE_OFFICIAL_MINGW:-1}"
 
 retry() {
   # max retry 15 times
@@ -114,7 +115,8 @@ apt install -y g++ \
   autopoint \
   patch \
   wget \
-  unzip
+  unzip \
+  bzip2
 
 BUILD_ARCH="$(gcc -dumpmachine)"
 TARGET_ARCH="${CROSS_HOST%%-*}"
@@ -166,7 +168,11 @@ if [ x"${USE_ZLIB_NG}" = x1 ]; then
 else
   ZLIB=zlib
 fi
-if [ x"${USE_LIBRESSL}" = x1 ]; then
+if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+  USE_ZLIB_NG=0
+  ZLIB=zlib
+  SSL=WinTLS
+elif [ x"${USE_LIBRESSL}" = x1 ]; then
   SSL=LibreSSL
 else
   SSL=OpenSSL
@@ -247,14 +253,23 @@ prepare_zlib() {
     # Fix mingw build sharedlibdir lost issue
     sed -i 's@^sharedlibdir=.*@sharedlibdir=${libdir}@' "${CROSS_PREFIX}/lib/pkgconfig/zlib.pc"
   else
-    zlib_tag="$(retry wget -qO- --compression=auto https://zlib.net/ \| grep -i "'<FONT.*FONT>'" \| sed -r "'s/.*zlib\s*([^<]+).*/\1/'" \| head -1)"
-    zlib_latest_url="https://zlib.net/zlib-${zlib_tag}.tar.xz"
-    if [ ! -f "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz" ]; then
-      retry wget -cT10 -O "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz.part" "${zlib_latest_url}"
-      mv -fv "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz.part" "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz"
+    if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+      zlib_tag="${MINGW_ZLIB_VER:-1.3.1}"
+      zlib_archive="zlib-${zlib_tag}.tar.gz"
+      zlib_latest_url="https://github.com/madler/zlib/releases/download/v${zlib_tag}/${zlib_archive}"
+      zlib_tar_flags="-zxf"
+    else
+      zlib_tag="$(retry wget -qO- --compression=auto https://zlib.net/ \| grep -i "'<FONT.*FONT>'" \| sed -r "'s/.*zlib\s*([^<]+).*/\1/'" \| head -1)"
+      zlib_archive="zlib-${zlib_tag}.tar.xz"
+      zlib_latest_url="https://zlib.net/${zlib_archive}"
+      zlib_tar_flags="-Jxf"
+    fi
+    if [ ! -f "${DOWNLOADS_DIR}/${zlib_archive}" ]; then
+      retry wget -cT10 -O "${DOWNLOADS_DIR}/${zlib_archive}.part" "${zlib_latest_url}"
+      mv -fv "${DOWNLOADS_DIR}/${zlib_archive}.part" "${DOWNLOADS_DIR}/${zlib_archive}"
     fi
     mkdir -p "/usr/src/zlib-${zlib_tag}"
-    tar -Jxf "${DOWNLOADS_DIR}/zlib-${zlib_tag}.tar.gz" --strip-components=1 -C "/usr/src/zlib-${zlib_tag}"
+    tar ${zlib_tar_flags} "${DOWNLOADS_DIR}/${zlib_archive}" --strip-components=1 -C "/usr/src/zlib-${zlib_tag}"
     cd "/usr/src/zlib-${zlib_tag}"
     if [ x"${TARGET_HOST}" = xWindows ]; then
       make -f win32/Makefile.gcc BINARY_PATH="${CROSS_PREFIX}/bin" INCLUDE_PATH="${CROSS_PREFIX}/include" LIBRARY_PATH="${CROSS_PREFIX}/lib" SHARED_MODE=0 PREFIX="${CROSS_HOST}-" -j$(nproc) install
@@ -266,6 +281,57 @@ prepare_zlib() {
     zlib_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/zlib.pc")"
     echo "- zlib: ${zlib_ver}, source: ${zlib_latest_url:-cached zlib}" >>"${BUILD_INFO}"
   fi
+}
+
+prepare_gmp() {
+  gmp_tag="${MINGW_GMP_VER:-6.3.0}"
+  gmp_archive="gmp-${gmp_tag}.tar.xz"
+  gmp_latest_url="https://gmplib.org/download/gmp/${gmp_archive}"
+  if [ ! -f "${DOWNLOADS_DIR}/${gmp_archive}" ]; then
+    retry wget -cT10 -O "${DOWNLOADS_DIR}/${gmp_archive}.part" "${gmp_latest_url}"
+    mv -fv "${DOWNLOADS_DIR}/${gmp_archive}.part" "${DOWNLOADS_DIR}/${gmp_archive}"
+  fi
+  mkdir -p "/usr/src/gmp-${gmp_tag}"
+  tar -Jxf "${DOWNLOADS_DIR}/${gmp_archive}" --strip-components=1 -C "/usr/src/gmp-${gmp_tag}"
+  cd "/usr/src/gmp-${gmp_tag}"
+  ./configure \
+    --disable-shared \
+    --enable-static \
+    --prefix="${CROSS_PREFIX}" \
+    --host="${CROSS_HOST}" \
+    --disable-cxx \
+    --enable-fat \
+    CFLAGS="-mtune=generic -O2 -g0"
+  make -j$(nproc)
+  make install
+  echo "- gmp: ${gmp_tag}, source: ${gmp_latest_url:-cached gmp}" >>"${BUILD_INFO}"
+}
+
+prepare_expat() {
+  expat_tag="${MINGW_EXPAT_VER:-2.5.0}"
+  expat_release_tag="R_${expat_tag//./_}"
+  expat_archive="expat-${expat_tag}.tar.bz2"
+  expat_latest_url="https://github.com/libexpat/libexpat/releases/download/${expat_release_tag}/${expat_archive}"
+  if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
+    expat_latest_url="https://gh-proxy.com/${expat_latest_url}"
+  fi
+  if [ ! -f "${DOWNLOADS_DIR}/${expat_archive}" ]; then
+    retry wget -cT10 -O "${DOWNLOADS_DIR}/${expat_archive}.part" "${expat_latest_url}"
+    mv -fv "${DOWNLOADS_DIR}/${expat_archive}.part" "${DOWNLOADS_DIR}/${expat_archive}"
+  fi
+  mkdir -p "/usr/src/expat-${expat_tag}"
+  tar -jxf "${DOWNLOADS_DIR}/${expat_archive}" --strip-components=1 -C "/usr/src/expat-${expat_tag}"
+  cd "/usr/src/expat-${expat_tag}"
+  ./configure \
+    --disable-shared \
+    --enable-static \
+    --prefix="${CROSS_PREFIX}" \
+    --host="${CROSS_HOST}" \
+    --build="${BUILD_ARCH}"
+  make -j$(nproc)
+  make install
+  expat_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/expat.pc")"
+  echo "- expat: ${expat_ver}, source: ${expat_latest_url:-cached expat}" >>"${BUILD_INFO}"
 }
 
 prepare_xz() {
@@ -372,19 +438,29 @@ prepare_libxml2() {
 }
 
 prepare_sqlite() {
-  sqlite_tag="$(retry wget -qO- --compression=auto https://www.sqlite.org/index.html \| sed -nr "'s/.*>Version (.+)<.*/\1/p'")"
-  sqlite_latest_url="https://github.com/sqlite/sqlite/archive/refs/tags/version-${sqlite_tag}.tar.gz"
-  if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
-    sqlite_latest_url="https://gh-proxy.com/${sqlite_latest_url}"
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    sqlite_tag="${MINGW_SQLITE_AUTOCONF_VER:-3430100}"
+    sqlite_year="${MINGW_SQLITE_YEAR:-2023}"
+    sqlite_archive="sqlite-autoconf-${sqlite_tag}.tar.gz"
+    sqlite_src_dir="sqlite-autoconf-${sqlite_tag}"
+    sqlite_latest_url="https://www.sqlite.org/${sqlite_year}/${sqlite_archive}"
+  else
+    sqlite_tag="$(retry wget -qO- --compression=auto https://www.sqlite.org/index.html \| sed -nr "'s/.*>Version (.+)<.*/\1/p'")"
+    sqlite_archive="sqlite-${sqlite_tag}.tar.gz"
+    sqlite_src_dir="sqlite-${sqlite_tag}"
+    sqlite_latest_url="https://github.com/sqlite/sqlite/archive/refs/tags/version-${sqlite_tag}.tar.gz"
+    if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
+      sqlite_latest_url="https://gh-proxy.com/${sqlite_latest_url}"
+    fi
   fi
-  if [ ! -f "${DOWNLOADS_DIR}/sqlite-${sqlite_tag}.tar.gz" ]; then
-    retry wget -cT10 -O "${DOWNLOADS_DIR}/sqlite-${sqlite_tag}.tar.gz.part" "${sqlite_latest_url}"
-    mv -fv "${DOWNLOADS_DIR}/sqlite-${sqlite_tag}.tar.gz.part" "${DOWNLOADS_DIR}/sqlite-${sqlite_tag}.tar.gz"
+  if [ ! -f "${DOWNLOADS_DIR}/${sqlite_archive}" ]; then
+    retry wget -cT10 -O "${DOWNLOADS_DIR}/${sqlite_archive}.part" "${sqlite_latest_url}"
+    mv -fv "${DOWNLOADS_DIR}/${sqlite_archive}.part" "${DOWNLOADS_DIR}/${sqlite_archive}"
   fi
-  mkdir -p "/usr/src/sqlite-${sqlite_tag}"
-  tar -zxf "${DOWNLOADS_DIR}/sqlite-${sqlite_tag}.tar.gz" --strip-components=1 -C "/usr/src/sqlite-${sqlite_tag}"
-  cd "/usr/src/sqlite-${sqlite_tag}"
-  if [ x"${TARGET_HOST}" = x"Windows" ]; then
+  mkdir -p "/usr/src/${sqlite_src_dir}"
+  tar -zxf "${DOWNLOADS_DIR}/${sqlite_archive}" --strip-components=1 -C "/usr/src/${sqlite_src_dir}"
+  cd "/usr/src/${sqlite_src_dir}"
+  if [ x"${TARGET_HOST}" = x"Windows" ] && [ x"${USE_OFFICIAL_MINGW}" != x1 ]; then
     if [ ! -f "${CROSS_PREFIX}/lib/libsqlite3.a" ]; then
       ln -sv libsqlite3.lib "${CROSS_PREFIX}/lib/libsqlite3.a"
     fi
@@ -398,13 +474,19 @@ prepare_sqlite() {
 }
 
 prepare_c_ares() {
-  # cares_latest_tag="$(retry wget -qO- --compression=auto https://api.github.com/repos/c-ares/c-ares/releases \| jq -r "'.[0].tag_name'")"
-  # waiting for new release to resolve: https://github.com/c-ares/c-ares/issues/1069
-  cares_latest_tag="v1.34.5"
-  cares_ver="${cares_latest_tag#v}"
-  cares_latest_url="https://github.com/c-ares/c-ares/releases/download/${cares_latest_tag}/c-ares-${cares_ver}.tar.gz"
-  # cares_ver="main"
-  # cares_latest_url="https://github.com/c-ares/c-ares/archive/refs/heads/main.tar.gz"
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    cares_ver="${MINGW_CARES_VER:-1.19.1}"
+    cares_release_tag="cares-${cares_ver//./_}"
+    cares_latest_url="https://github.com/c-ares/c-ares/releases/download/${cares_release_tag}/c-ares-${cares_ver}.tar.gz"
+  else
+    # cares_latest_tag="$(retry wget -qO- --compression=auto https://api.github.com/repos/c-ares/c-ares/releases \| jq -r "'.[0].tag_name'")"
+    # waiting for new release to resolve: https://github.com/c-ares/c-ares/issues/1069
+    cares_latest_tag="v1.34.5"
+    cares_ver="${cares_latest_tag#v}"
+    cares_latest_url="https://github.com/c-ares/c-ares/releases/download/${cares_latest_tag}/c-ares-${cares_ver}.tar.gz"
+    # cares_ver="main"
+    # cares_latest_url="https://github.com/c-ares/c-ares/archive/refs/heads/main.tar.gz"
+  fi
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
     cares_latest_url="https://gh-proxy.com/${cares_latest_url}"
   fi
@@ -418,7 +500,11 @@ prepare_c_ares() {
   if [ ! -f "./configure" ]; then
     autoreconf -i
   fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --disable-tests
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    ./configure --host="${CROSS_HOST}" --build="${BUILD_ARCH}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --without-random LIBS="-lws2_32"
+  else
+    ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --disable-tests
+  fi
   make -j$(nproc)
   make install
   cares_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/libcares.pc")"
@@ -426,16 +512,29 @@ prepare_c_ares() {
 }
 
 prepare_libssh2() {
-  libssh2_tag="$(retry wget -qO- --compression=auto https://libssh2.org/ \| sed -nr "'s@.*libssh2 ([^<]*).*released on.*@\1@p'")"
-  libssh2_latest_url="https://libssh2.org/download/libssh2-${libssh2_tag}.tar.xz"
-  if [ ! -f "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz" ]; then
-    retry wget -cT10 -O "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz.part" "${libssh2_latest_url}"
-    mv -fv "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz.part" "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz"
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    libssh2_tag="${MINGW_LIBSSH2_VER:-1.11.0}"
+    libssh2_archive="libssh2-${libssh2_tag}.tar.bz2"
+    libssh2_latest_url="https://libssh2.org/download/${libssh2_archive}"
+    libssh2_tar_flags="-jxf"
+  else
+    libssh2_tag="$(retry wget -qO- --compression=auto https://libssh2.org/ \| sed -nr "'s@.*libssh2 ([^<]*).*released on.*@\1@p'")"
+    libssh2_archive="libssh2-${libssh2_tag}.tar.xz"
+    libssh2_latest_url="https://libssh2.org/download/${libssh2_archive}"
+    libssh2_tar_flags="-Jxf"
+  fi
+  if [ ! -f "${DOWNLOADS_DIR}/${libssh2_archive}" ]; then
+    retry wget -cT10 -O "${DOWNLOADS_DIR}/${libssh2_archive}.part" "${libssh2_latest_url}"
+    mv -fv "${DOWNLOADS_DIR}/${libssh2_archive}.part" "${DOWNLOADS_DIR}/${libssh2_archive}"
   fi
   mkdir -p "/usr/src/libssh2-${libssh2_tag}"
-  tar -Jxf "${DOWNLOADS_DIR}/libssh2-${libssh2_tag}.tar.xz" --strip-components=1 -C "/usr/src/libssh2-${libssh2_tag}"
+  tar ${libssh2_tar_flags} "${DOWNLOADS_DIR}/${libssh2_archive}" --strip-components=1 -C "/usr/src/libssh2-${libssh2_tag}"
   cd "/usr/src/libssh2-${libssh2_tag}"
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --disable-examples-build
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    ./configure --host="${CROSS_HOST}" --build="${BUILD_ARCH}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared LIBS="-lws2_32"
+  else
+    ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --disable-examples-build
+  fi
   make -j$(nproc)
   make install
   libssh2_ver="$(grep Version: "${CROSS_PREFIX}/lib/pkgconfig/libssh2.pc")"
@@ -445,6 +544,8 @@ prepare_libssh2() {
 build_aria2() {
   if [ -n "${ARIA2_VER}" ]; then
     aria2_tag="${ARIA2_VER}"
+  elif [ -n "${ARIA2_REF}" ]; then
+    aria2_tag="${ARIA2_REF}"
   else
     aria2_tag=master
     # Check download cache whether expired
@@ -460,6 +561,8 @@ build_aria2() {
 
   if [ -n "${ARIA2_VER}" ]; then
     aria2_latest_url="https://github.com/aria2/aria2/releases/download/release-${ARIA2_VER}/aria2-${ARIA2_VER}.tar.gz"
+  elif [ -n "${ARIA2_REF}" ]; then
+    aria2_latest_url="https://github.com/aria2/aria2/archive/${ARIA2_REF}.tar.gz"
   else
     aria2_latest_url="https://github.com/aria2/aria2/archive/refs/heads/master.tar.gz"
   fi
@@ -484,17 +587,33 @@ build_aria2() {
   if [ ! -f ./configure ]; then
     autoreconf -i
   fi
-  # Configure aria2 with SSL certificate handling
+  # Configure aria2.  The Windows path mirrors upstream mingw-config.
   if [ x"${TARGET_HOST}" = xWindows ]; then
-    # For Windows, download and bundle CA certificates
-    if [ ! -f "${DOWNLOADS_DIR}/ca-certificates.crt" ]; then
-      retry wget -cT10 -O "${DOWNLOADS_DIR}/ca-certificates.crt" "https://curl.se/ca/cacert.pem"
+    if [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+      ARIA2_EXT_CONF="--without-included-gettext --disable-nls --with-libcares --without-gnutls --without-openssl --with-sqlite3 --without-libxml2 --with-libexpat --with-libz --with-libgmp --with-libssh2 --without-libgcrypt --without-libnettle --with-cppunit-prefix=${CROSS_PREFIX}"
+    else
+      if [ ! -f "${DOWNLOADS_DIR}/ca-certificates.crt" ]; then
+        retry wget -cT10 -O "${DOWNLOADS_DIR}/ca-certificates.crt" "https://curl.se/ca/cacert.pem"
+      fi
+      ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares --with-ca-bundle=C:/ca-certificates.crt"
     fi
-    ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares --with-ca-bundle=C:/ca-certificates.crt"
   else
     ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares"
   fi
-  ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF}
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    ./configure \
+      --host="${CROSS_HOST}" \
+      --prefix="${CROSS_PREFIX}" \
+      --enable-silent-rules \
+      ARIA2_STATIC=yes \
+      ${ARIA2_EXT_CONF} \
+      CPPFLAGS="-I${CROSS_PREFIX}/include" \
+      LDFLAGS="-L${CROSS_PREFIX}/lib" \
+      PKG_CONFIG="/usr/bin/pkg-config" \
+      PKG_CONFIG_PATH="${CROSS_PREFIX}/lib/pkgconfig"
+  else
+    ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF}
+  fi
   make -j$(nproc)
   make install
   # Strip debug symbols to reduce binary size
@@ -502,7 +621,7 @@ build_aria2() {
     "${CROSS_HOST}-strip" "${CROSS_PREFIX}/bin/"aria2c* || true
   fi
   # Bundle CA certificates for Windows builds
-  if [ x"${TARGET_HOST}" = xWindows ]; then
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" != x1 ]; then
     cp -v "${DOWNLOADS_DIR}/ca-certificates.crt" "${CROSS_PREFIX}/bin/"
   fi
   echo "- aria2: source: ${aria2_latest_url:-cached aria2}" >>"${BUILD_INFO}"
@@ -525,17 +644,31 @@ test_build() {
   # get release
   cp -fv "${CROSS_PREFIX}/bin/"aria2* "${SELF_DIR}"
   echo "============= ARIA2 TEST DOWNLOAD =============="
-  "${RUNNER_CHECKER}" "${CROSS_PREFIX}/bin/aria2c"* -t 10 --console-log-level=debug --http-accept-gzip=true https://github.com/ -d /tmp -o test
+  TEST_ARGS="-t 10 --console-log-level=debug --http-accept-gzip=true"
+  TEST_URL="https://github.com/"
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    # Wine does not reliably reflect the real Windows certificate store.
+    # HTTPS certificate verification is covered by the windows-https-smoke-test job.
+    TEST_URL="http://example.com/"
+  fi
+  "${RUNNER_CHECKER}" "${CROSS_PREFIX}/bin/aria2c"* ${TEST_ARGS} "${TEST_URL}" -d /tmp -o test
   echo "================================================"
 }
 
-prepare_cmake
-prepare_ninja
+if [ x"${TARGET_HOST}" != xWindows ] || [ x"${USE_OFFICIAL_MINGW}" != x1 ]; then
+  prepare_cmake
+  prepare_ninja
+fi
 prepare_zlib
-prepare_xz
-prepare_ssl
-prepare_libiconv
-prepare_libxml2
+if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+  prepare_gmp
+  prepare_expat
+else
+  prepare_xz
+  prepare_ssl
+  prepare_libiconv
+  prepare_libxml2
+fi
 prepare_sqlite
 prepare_c_ares
 prepare_libssh2
@@ -555,6 +688,6 @@ esac
 # get release
 cp -fv "${CROSS_PREFIX}/bin/"aria2* "${SELF_DIR}"
 # Bundle CA certificates for Windows builds
-if [ x"${TARGET_HOST}" = xWindows ]; then
+if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" != x1 ]; then
   cp -fv "${DOWNLOADS_DIR}/ca-certificates.crt" "${SELF_DIR}"
 fi
