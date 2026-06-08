@@ -59,7 +59,20 @@ jobs:
         run: |
           echo "🗑️ Cleaning up old release v1.37.0..."
           gh release delete v1.37.0 --cleanup-tag || true
+          git tag -d v1.37.0 || true
+          git push origin :refs/tags/v1.37.0 || true
           echo "✅ Old release cleanup completed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Create tag
+        run: |
+          echo "🏷️ Creating tag v1.37.0..."
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a v1.37.0 -m "Aria2 v1.37.0"
+          git push origin v1.37.0
+          echo "✅ Tag v1.37.0 created"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
@@ -69,7 +82,6 @@ jobs:
           gh release create v1.37.0 \
             --draft \
             -t 'Aria2 v1.37.0' \
-            --target ${{ github.sha }} \
             --notes "## Aria2 v1.37.0
 
             Custom build with enhanced patches.
@@ -108,7 +120,6 @@ jobs:
             Built with latest versions: OpenSSL, zlib-ng, c-ares, libssh2, and more.
             "
           echo "✅ Draft release created"
-          echo "Release URL: https://github.com/lisrain/aria2_build_new/releases/tag/v1.37.0"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
