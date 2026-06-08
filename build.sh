@@ -286,10 +286,25 @@ prepare_zlib() {
 prepare_gmp() {
   gmp_tag="${MINGW_GMP_VER:-6.3.0}"
   gmp_archive="gmp-${gmp_tag}.tar.xz"
-  gmp_latest_url="https://gmplib.org/download/gmp/${gmp_archive}"
+  gmp_latest_url="https://ftpmirror.gnu.org/gmp/${gmp_archive}"
   if [ ! -f "${DOWNLOADS_DIR}/${gmp_archive}" ]; then
-    retry wget -cT10 -O "${DOWNLOADS_DIR}/${gmp_archive}.part" "${gmp_latest_url}"
-    mv -fv "${DOWNLOADS_DIR}/${gmp_archive}.part" "${DOWNLOADS_DIR}/${gmp_archive}"
+    for gmp_download_url in \
+      "https://ftpmirror.gnu.org/gmp/${gmp_archive}" \
+      "https://ftp.gnu.org/gnu/gmp/${gmp_archive}" \
+      "https://mirrors.kernel.org/gnu/gmp/${gmp_archive}" \
+      "https://gmplib.org/download/gmp/${gmp_archive}"; do
+      echo "Downloading GMP from ${gmp_download_url}"
+      rm -f "${DOWNLOADS_DIR}/${gmp_archive}.part"
+      if wget -cT10 -t 3 -O "${DOWNLOADS_DIR}/${gmp_archive}.part" "${gmp_download_url}"; then
+        mv -fv "${DOWNLOADS_DIR}/${gmp_archive}.part" "${DOWNLOADS_DIR}/${gmp_archive}"
+        gmp_latest_url="${gmp_download_url}"
+        break
+      fi
+    done
+    if [ ! -f "${DOWNLOADS_DIR}/${gmp_archive}" ]; then
+      echo "Failed to download ${gmp_archive} from all known mirrors" >&2
+      return 1
+    fi
   fi
   mkdir -p "/usr/src/gmp-${gmp_tag}"
   tar -Jxf "${DOWNLOADS_DIR}/${gmp_archive}" --strip-components=1 -C "/usr/src/gmp-${gmp_tag}"
