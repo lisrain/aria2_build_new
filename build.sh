@@ -524,7 +524,17 @@ prepare_c_ares() {
     autoreconf -i
   fi
   if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-    ./configure --host="${CROSS_HOST}" --build="${BUILD_ARCH}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --without-random LIBS="-lws2_32"
+    ./configure \
+      --host="${CROSS_HOST}" \
+      --build="${BUILD_ARCH}" \
+      --prefix="${CROSS_PREFIX}" \
+      --enable-static \
+      --disable-shared \
+      --without-random \
+      CFLAGS="-std=gnu17" \
+      CPPFLAGS="-I${CROSS_PREFIX}/include" \
+      LDFLAGS="-L${CROSS_PREFIX}/lib" \
+      LIBS="-lws2_32"
   else
     ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --disable-tests
   fi
@@ -554,7 +564,16 @@ prepare_libssh2() {
   tar ${libssh2_tar_flags} "${DOWNLOADS_DIR}/${libssh2_archive}" --strip-components=1 -C "/usr/src/libssh2-${libssh2_tag}"
   cd "/usr/src/libssh2-${libssh2_tag}"
   if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-    ./configure --host="${CROSS_HOST}" --build="${BUILD_ARCH}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared LIBS="-lws2_32"
+    ./configure \
+      --host="${CROSS_HOST}" \
+      --build="${BUILD_ARCH}" \
+      --prefix="${CROSS_PREFIX}" \
+      --enable-static \
+      --disable-shared \
+      CFLAGS="-std=gnu17" \
+      CPPFLAGS="-I${CROSS_PREFIX}/include" \
+      LDFLAGS="-L${CROSS_PREFIX}/lib" \
+      LIBS="-lws2_32"
   else
     ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules --disable-examples-build
   fi
