@@ -105,14 +105,14 @@ jobs:
 
             | Platform | Architecture | Download |
             |----------|--------------|----------|
-            | Linux | ARM (armv6) | [aria2_arm-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2_arm-unknown-linux-musl_static.zip) |
-            | Linux | ARMv7 | [aria2_armv7-unknown-linux-musleabihf_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2_armv7-unknown-linux-musleabihf_static.zip) |
-            | Linux | AArch64 | [aria2_aarch64-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2_aarch64-unknown-linux-musl_static.zip) |
-            | Linux | LoongArch64 | [aria2_loongarch64-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2_loongarch64-unknown-linux-musl_static.zip) |
-            | Linux | x86_64 | [aria2_x86_64-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2_x86_64-unknown-linux-musl_static.zip) |
-            | Linux | i686 | [aria2_i686-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2_i686-unknown-linux-musl_static.zip) |
-            | Windows | x86_64 | [aria2_x86_64-w64-mingw32_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2_x86_64-w64-mingw32_static.zip) |
-            | Windows | i686 | [aria2_i686-w64-mingw32_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2_i686-w64-mingw32_static.zip) |
+            | Linux | ARM (armv6) | [aria2-arm-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2-arm-unknown-linux-musl_static.zip) |
+            | Linux | ARMv7 | [aria2-armv7-unknown-linux-musleabihf_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2-armv7-unknown-linux-musleabihf_static.zip) |
+            | Linux | AArch64 | [aria2-aarch64-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2-aarch64-unknown-linux-musl_static.zip) |
+            | Linux | LoongArch64 | [aria2-loongarch64-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2-loongarch64-unknown-linux-musl_static.zip) |
+            | Linux | x86_64 | [aria2-x86_64-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2-x86_64-unknown-linux-musl_static.zip) |
+            | Linux | i686 | [aria2-i686-unknown-linux-musl_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2-i686-unknown-linux-musl_static.zip) |
+            | Windows | x86_64 | [aria2-x86_64-w64-mingw32_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2-x86_64-w64-mingw32_static.zip) |
+            | Windows | i686 | [aria2-i686-w64-mingw32_static.zip](https://github.com/lisrain/aria2_build_new/releases/download/v1.37.0/aria2-i686-w64-mingw32_static.zip) |
 
             ---
 
