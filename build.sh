@@ -321,7 +321,10 @@ prepare_gmp() {
     --host="${CROSS_HOST}" \
     --build="${BUILD_ARCH}" \
     --disable-cxx \
-    CFLAGS="-mtune=generic -O2 -g0"
+    CFLAGS="-std=gnu17 -mtune=generic -O2 -g0" || {
+      cat config.log
+      return 1
+    }
   make -j$(nproc)
   make install
   echo "- gmp: ${gmp_tag}, source: ${gmp_latest_url:-cached gmp}" >>"${BUILD_INFO}"
