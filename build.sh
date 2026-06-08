@@ -152,8 +152,13 @@ export CROSS_PREFIX="${CROSS_ROOT}/${CROSS_HOST}"
 export PKG_CONFIG_LIBDIR="${CROSS_PREFIX}/lib64/pkgconfig:${CROSS_PREFIX}/lib/pkgconfig"
 export LDFLAGS="-L${CROSS_PREFIX}/lib64 -L${CROSS_PREFIX}/lib -s -static --static"
 export CFLAGS="-I${CROSS_PREFIX}/include"
-export CC="${CROSS_HOST}-cc"
-export CXX="${CROSS_HOST}-c++"
+if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+  export CC="${CROSS_HOST}-gcc"
+  export CXX="${CROSS_HOST}-g++"
+else
+  export CC="${CROSS_HOST}-cc"
+  export CXX="${CROSS_HOST}-c++"
+fi
 export CPP="${CROSS_HOST}-cpp"
 
 SELF_DIR="$(dirname "$(realpath "${0}")")"
@@ -309,7 +314,7 @@ prepare_gmp() {
   mkdir -p "/usr/src/gmp-${gmp_tag}"
   tar -Jxf "${DOWNLOADS_DIR}/${gmp_archive}" --strip-components=1 -C "/usr/src/gmp-${gmp_tag}"
   cd "/usr/src/gmp-${gmp_tag}"
-  ./configure \
+  CC="${CROSS_HOST}-gcc" ./configure \
     --disable-shared \
     --enable-static \
     --prefix="${CROSS_PREFIX}" \
