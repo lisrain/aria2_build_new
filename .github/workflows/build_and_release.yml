@@ -289,7 +289,7 @@ jobs:
           foreach ($asset in $assets) {
             $downloaded = $false
             for ($i = 1; $i -le 12; $i++) {
-              gh release download $env:RELEASE_TAG -p $asset -D smoke
+              gh release download $env:RELEASE_TAG -R $env:GITHUB_REPOSITORY -p $asset -D smoke
               if ($LASTEXITCODE -eq 0 -and (Test-Path "smoke\$asset")) {
                 $downloaded = $true
                 break
