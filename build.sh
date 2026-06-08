@@ -524,7 +524,7 @@ prepare_c_ares() {
     autoreconf -i
   fi
   if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-    ./configure \
+    ac_cv_func_if_indextoname=no ./configure \
       --host="${CROSS_HOST}" \
       --build="${BUILD_ARCH}" \
       --prefix="${CROSS_PREFIX}" \
