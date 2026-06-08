@@ -319,8 +319,8 @@ prepare_gmp() {
     --enable-static \
     --prefix="${CROSS_PREFIX}" \
     --host="${CROSS_HOST}" \
+    --build="${BUILD_ARCH}" \
     --disable-cxx \
-    --enable-fat \
     CFLAGS="-mtune=generic -O2 -g0"
   make -j$(nproc)
   make install
