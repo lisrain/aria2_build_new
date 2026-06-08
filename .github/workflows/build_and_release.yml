@@ -8,48 +8,108 @@ on:
       - 'build.sh'
       - '.github/workflows/build_and_release.yml'
       - 'patch/**'
-  pull_request:
-    branches:
-      - "*"
-    paths:
-      - 'build.sh'
-      - '.github/workflows/build_and_release.yml'
-      - 'patch/**'
-  schedule:
-    - cron: "0 0 * * 6"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  create-prerelease:
-    name: Create Prerelease
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  cleanup-and-create-draft:
+    name: Cleanup & Create Draft
     runs-on: ubuntu-latest
+    outputs:
+      build_time: ${{ steps.set_time.outputs.build_time }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - name: Set current date as env variable
-        run: echo "NOW=$(date --utc)" >> $GITHUB_ENV
-      - name: Delete Old Release
-        run: gh release delete v1.37.0 --cleanup-tag || true
+
+      - name: Check and cleanup previous runs
+        run: |
+          echo "🔍 Checking previous workflow runs..."
+          RUNS=$(gh run list --workflow=build_and_release.yml --limit=5 --json databaseId,status,conclusion,createdAt --jq '.[] | select(.databaseId != ${{ github.run_id }})')
+          echo "Found runs:"
+          echo "$RUNS"
+
+          for RUN_ID in $(echo "$RUNS" | jq -r '.databaseId'); do
+            STATUS=$(echo "$RUNS" | jq -r "select(.databaseId == $RUN_ID) | .status")
+            CONCLUSION=$(echo "$RUNS" | jq -r "select(.databaseId == $RUN_ID) | .conclusion")
+
+            if [ "$STATUS" = "in_progress" ] || [ "$STATUS" = "queued" ] || [ "$STATUS" = "waiting" ]; then
+              echo "⚠️ Stopping running workflow #${RUN_ID} (status: ${STATUS})..."
+              gh run cancel $RUN_ID || true
+              gh run delete $RUN_ID --yes || true
+              echo "✅ Stopped and deleted workflow #${RUN_ID}"
+            elif [ "$CONCLUSION" = "failure" ] || [ "$CONCLUSION" = "cancelled" ] || [ "$CONCLUSION" = "timed_out" ]; then
+              echo "🗑️ Deleting failed workflow #${RUN_ID} (conclusion: ${CONCLUSION})..."
+              gh run delete $RUN_ID --yes || true
+              echo "✅ Deleted workflow #${RUN_ID}"
+            else
+              echo "ℹ️ Skipping workflow #${RUN_ID} (status: ${STATUS}, conclusion: ${CONCLUSION})"
+            fi
+          done
+          echo "✅ Previous runs cleanup completed"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-      - name: Create Prerelease
+
+      - name: Set build time
+        id: set_time
+        run: echo "build_time=$(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
+
+      - name: Cleanup old release and tag
+        run: |
+          gh release delete v1.37.0 --cleanup-tag --yes || true
+          git tag -d v1.37.0 || true
+          git push origin :refs/tags/v1.37.0 || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Create Draft Release
         run: |
           gh release create v1.37.0 \
-            -p \
+            --draft \
             -t 'Aria2 v1.37.0' \
-            --notes "Building time: ${NOW}
-            - - -
+            --notes "## Aria2 v1.37.0
+
+            Custom build with enhanced patches.
+
+            **Build Time:** ${{ steps.set_time.outputs.build_time }}
+
+            ---
+
+            ## Features
+
+            - Unlock connection-per-server limit (unlimited connections)
+            - Download retry on slow speed
+            - HTTP 4xx error retry support
+            - Windows daemon support
+            - And more...
+
+            ---
+
+            ## Platforms
+
+            | Platform | Architecture | Download |
+            |----------|--------------|----------|
+            | Linux | ARM (armv6) | [aria2_arm-unknown-linux-musl_static.zip](#) |
+            | Linux | ARMv7 | [aria2_armv7-unknown-linux-musleabihf_static.zip](#) |
+            | Linux | AArch64 | [aria2_aarch64-unknown-linux-musl_static.zip](#) |
+            | Linux | LoongArch64 | [aria2_loongarch64-unknown-linux-musl_static.zip](#) |
+            | Linux | x86_64 | [aria2_x86_64-unknown-linux-musl_static.zip](#) |
+            | Linux | i686 | [aria2_i686-unknown-linux-musl_static.zip](#) |
+            | Windows | x86_64 | [aria2_x86_64-w64-mingw32_static.zip](#) |
+            | Windows | i686 | [aria2_i686-w64-mingw32_static.zip](#) |
+
+            ---
+
+            ## Dependencies
+
+            Built with latest versions: OpenSSL, zlib-ng, c-ares, libssh2, and more.
             "
-          gh release edit v1.37.0 --draft=false
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
   static-build-linux:
-    needs: create-prerelease
+    needs: cleanup-and-create-draft
     runs-on: ubuntu-latest
     container: "ghcr.io/abcfy2/clang-cross-toolchain-ubuntu:${{ matrix.cross_host }}"
     strategy:
@@ -75,12 +135,7 @@ jobs:
       - name: compile
         env:
           CROSS_HOST: "${{ matrix.cross_host }}"
-          USE_LIBRESSL: "${{ matrix.use_libressl }}"
         run: |
-          if [ "${GITHUB_EVENT_NAME}" = release ]; then
-            export ARIA2_VER="${GITHUB_REF#refs/*/}"
-            echo "ARIA2_VER=${ARIA2_VER}" >> $GITHUB_ENV
-          fi
           chmod +x "${GITHUB_WORKSPACE}/build.sh"
           "${GITHUB_WORKSPACE}/build.sh"
       - name: zip archiving
@@ -92,18 +147,18 @@ jobs:
           echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_ENV
           zip -j9v "/tmp/${ARCHIVE_NAME}" "${GITHUB_WORKSPACE}"/aria2c*
         shell: bash
-      - name: Upload to Prerelease
+      - name: Upload to Draft
         uses: softprops/action-gh-release@v3
         with:
           files: /tmp/${{ env.ARCHIVE_NAME }}
-          prerelease: true
+          draft: true
           tag_name: v1.37.0
           append_body: true
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
   static-build-mingw:
-    needs: create-prerelease
+    needs: cleanup-and-create-draft
     runs-on: ubuntu-latest
     container: "ghcr.io/abcfy2/mingw-cross-toolchain-ubuntu:${{ matrix.cross_host }}"
     strategy:
@@ -126,10 +181,6 @@ jobs:
         env:
           CROSS_HOST: "${{ matrix.cross_host }}"
         run: |
-          if [ "${GITHUB_EVENT_NAME}" = release ]; then
-            export ARIA2_VER="${GITHUB_REF#refs/*/}"
-            echo "ARIA2_VER=${ARIA2_VER}" >> $GITHUB_ENV
-          fi
           chmod +x "${GITHUB_WORKSPACE}/build.sh"
           "${GITHUB_WORKSPACE}/build.sh"
       - name: zip archiving
@@ -141,39 +192,27 @@ jobs:
           echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_ENV
           zip -j9v "/tmp/${ARCHIVE_NAME}" "${GITHUB_WORKSPACE}"/aria2c*
         shell: bash
-      - name: Upload to Prerelease
+      - name: Upload to Draft
         uses: softprops/action-gh-release@v3
         with:
           files: /tmp/${{ env.ARCHIVE_NAME }}
-          prerelease: true
+          draft: true
           tag_name: v1.37.0
           append_body: true
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-  finalize-release:
-    name: Finalize Release
-    needs: [static-build-linux, static-build-mingw]
+  publish-release:
+    name: Publish Release
+    needs: [cleanup-and-create-draft, static-build-linux, static-build-mingw]
     if: success()
     runs-on: ubuntu-latest
     steps:
-      - name: Convert to Release
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Publish Draft Release
         run: |
           gh release edit v1.37.0 \
-            --prerelease=false \
-            --notes "Aria2 v1.37.0 - Custom build with enhanced patches
-
-            ## Features
-            - Unlock connection-per-server limit (unlimited connections)
-            - Download retry on slow speed
-            - HTTP 4xx error retry support
-            - Windows daemon support
-            - And more...
-
-            ## Platforms
-            - Linux: arm, armv7, aarch64, loongarch64, x86_64, i686
-            - Windows: x86_64, i686
-
-            Built with latest dependencies: OpenSSL, zlib-ng, c-ares, libssh2"
+            --draft=false
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
