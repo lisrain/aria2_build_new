@@ -168,7 +168,7 @@ jobs:
 
             ## Dependencies
 
-            Linux builds use the existing static dependency set. Windows builds mirror upstream mingw-config: WinTLS, zlib, c-ares, libssh2, sqlite3, expat, and gmp.
+            Linux builds use an upstream-style static profile: OpenSSL 3.x, zlib-ng/zlib, c-ares, libssh2, sqlite3, expat, and stripped size-optimized binaries. Windows builds mirror upstream mingw-config with newer stable zlib, c-ares, libssh2, sqlite3, expat, and gmp defaults. GitHub-hosted dependencies prefer the latest stable release and fall back to locally verified versions if release lookup fails.
             "
           echo "✅ Draft release created"
         env:

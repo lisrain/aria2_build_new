@@ -48,6 +48,15 @@ esac
 
 export USE_ZLIB_NG="${USE_ZLIB_NG:-1}"
 export USE_OFFICIAL_MINGW="${USE_OFFICIAL_MINGW:-1}"
+export LINUX_OFFICIAL_STYLE="${LINUX_OFFICIAL_STYLE:-1}"
+export LINUX_SIZE_OPTIMIZE="${LINUX_SIZE_OPTIMIZE:-1}"
+
+export FALLBACK_ZLIB_NG_TAG="${FALLBACK_ZLIB_NG_TAG:-2.3.3}"
+export FALLBACK_ZLIB_RELEASE_TAG="${FALLBACK_ZLIB_RELEASE_TAG:-v1.3.2}"
+export FALLBACK_EXPAT_RELEASE_TAG="${FALLBACK_EXPAT_RELEASE_TAG:-R_2_8_1}"
+export FALLBACK_CARES_RELEASE_TAG="${FALLBACK_CARES_RELEASE_TAG:-v1.34.6}"
+export FALLBACK_LIBSSH2_RELEASE_TAG="${FALLBACK_LIBSSH2_RELEASE_TAG:-libssh2-1.11.1}"
+export FALLBACK_OPENSSL_URL="${FALLBACK_OPENSSL_URL:-https://github.com/openssl/openssl/releases/download/openssl-3.6.2/openssl-3.6.2.tar.gz}"
 
 retry() {
   # max retry 15 times
@@ -65,6 +74,63 @@ retry() {
   done
   echo "execute '$@' failed" >&2
   return 1
+}
+
+github_releases_json() {
+  repo="$1"
+  retry wget -qO- --compression=auto "https://api.github.com/repos/${repo}/releases"
+}
+
+github_latest_stable_tag() {
+  repo="$1"
+  tag_regex="$2"
+  tag="$(github_releases_json "${repo}" | jq -r --arg tag_regex "${tag_regex}" \
+    '[.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test($tag_regex))][0]'
+  )"
+  if [ -z "${tag}" ] || [ x"${tag}" = xnull ]; then
+    echo "Failed to resolve latest stable GitHub tag for ${repo} (${tag_regex})" >&2
+    return 1
+  fi
+  printf '%s\n' "${tag}"
+}
+
+github_latest_stable_asset_url() {
+  repo="$1"
+  tag_regex="$2"
+  asset_regex="$3"
+  asset_url="$(github_releases_json "${repo}" | jq -r --arg tag_regex "${tag_regex}" --arg asset_regex "${asset_regex}" \
+    '[.[] | select(.draft == false and .prerelease == false and (.tag_name | test($tag_regex))) | .assets[] | select(.name | test($asset_regex)) | .browser_download_url][0]'
+  )"
+  if [ -z "${asset_url}" ] || [ x"${asset_url}" = xnull ]; then
+    echo "Failed to resolve latest stable GitHub asset for ${repo} (${tag_regex}, ${asset_regex})" >&2
+    return 1
+  fi
+  printf '%s\n' "${asset_url}"
+}
+
+github_latest_stable_tag_or_fallback() {
+  repo="$1"
+  tag_regex="$2"
+  fallback_tag="$3"
+  if tag="$(github_latest_stable_tag "${repo}" "${tag_regex}")"; then
+    printf '%s\n' "${tag}"
+  else
+    echo "Using fallback GitHub tag for ${repo}: ${fallback_tag}" >&2
+    printf '%s\n' "${fallback_tag}"
+  fi
+}
+
+github_latest_stable_asset_url_or_fallback() {
+  repo="$1"
+  tag_regex="$2"
+  asset_regex="$3"
+  fallback_url="$4"
+  if asset_url="$(github_latest_stable_asset_url "${repo}" "${tag_regex}" "${asset_regex}")"; then
+    printf '%s\n' "${asset_url}"
+  else
+    echo "Using fallback GitHub asset for ${repo}: ${fallback_url}" >&2
+    printf '%s\n' "${fallback_url}"
+  fi
 }
 
 source /etc/os-release
@@ -151,13 +217,20 @@ export PATH="${CROSS_ROOT}/bin:${PATH}"
 export CROSS_PREFIX="${CROSS_ROOT}/${CROSS_HOST}"
 export PKG_CONFIG_LIBDIR="${CROSS_PREFIX}/lib64/pkgconfig:${CROSS_PREFIX}/lib/pkgconfig"
 export LDFLAGS="-L${CROSS_PREFIX}/lib64 -L${CROSS_PREFIX}/lib -s -static --static"
-export CFLAGS="-I${CROSS_PREFIX}/include"
+export CPPFLAGS="-I${CROSS_PREFIX}/include"
+export CFLAGS="${CFLAGS:-} -I${CROSS_PREFIX}/include"
+export CXXFLAGS="${CXXFLAGS:-} -I${CROSS_PREFIX}/include"
 if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
   export CC="${CROSS_HOST}-gcc"
   export CXX="${CROSS_HOST}-g++"
 else
   export CC="${CROSS_HOST}-cc"
   export CXX="${CROSS_HOST}-c++"
+fi
+if [ x"${TARGET_HOST}" = xLinux ] && [ x"${LINUX_SIZE_OPTIMIZE}" = x1 ]; then
+  export CFLAGS="${CFLAGS} -Os -g0 -ffunction-sections -fdata-sections"
+  export CXXFLAGS="${CXXFLAGS} -Os -g0 -ffunction-sections -fdata-sections"
+  export LDFLAGS="${LDFLAGS} -Wl,--gc-sections -Wl,--strip-all"
 fi
 export CPP="${CROSS_HOST}-cpp"
 
@@ -183,7 +256,13 @@ else
   SSL=OpenSSL
 fi
 
-echo "## Build Info - ${CROSS_HOST} with ${SSL} and ${ZLIB}" >"${BUILD_INFO}"
+if [ x"${TARGET_HOST}" = xLinux ] && [ x"${LINUX_OFFICIAL_STYLE}" = x1 ]; then
+  BUILD_PROFILE="official-style"
+else
+  BUILD_PROFILE="full"
+fi
+
+echo "## Build Info - ${CROSS_HOST} with ${SSL}, ${ZLIB}, ${BUILD_PROFILE}" >"${BUILD_INFO}"
 echo "Building using these dependencies:" >>"${BUILD_INFO}"
 
 prepare_cmake() {
@@ -229,7 +308,7 @@ prepare_ninja() {
 
 prepare_zlib() {
   if [ x"${USE_ZLIB_NG}" = x"1" ]; then
-    zlib_ng_latest_tag="$(retry wget -qO- --compression=auto https://api.github.com/repos/zlib-ng/zlib-ng/releases \| jq -r "'.[0].tag_name'")"
+    zlib_ng_latest_tag="${ZLIB_NG_TAG:-$(github_latest_stable_tag_or_fallback zlib-ng/zlib-ng '^[0-9]+[.][0-9]+([.][0-9]+)?$' "${FALLBACK_ZLIB_NG_TAG}")}"
     zlib_ng_latest_url="https://github.com/zlib-ng/zlib-ng/archive/refs/tags/${zlib_ng_latest_tag}.tar.gz"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
       zlib_ng_latest_url="https://gh-proxy.com/${zlib_ng_latest_url}"
@@ -259,9 +338,13 @@ prepare_zlib() {
     sed -i 's@^sharedlibdir=.*@sharedlibdir=${libdir}@' "${CROSS_PREFIX}/lib/pkgconfig/zlib.pc"
   else
     if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-      zlib_tag="${MINGW_ZLIB_VER:-1.3.1}"
+      zlib_release_tag="${MINGW_ZLIB_RELEASE_TAG:-$(github_latest_stable_tag_or_fallback madler/zlib '^v[0-9]+[.][0-9]+([.][0-9]+)?$' "${FALLBACK_ZLIB_RELEASE_TAG}")}"
+      zlib_tag="${MINGW_ZLIB_VER:-${zlib_release_tag#v}}"
+      if [ -n "${MINGW_ZLIB_VER}" ] && [ -z "${MINGW_ZLIB_RELEASE_TAG}" ]; then
+        zlib_release_tag="v${zlib_tag}"
+      fi
       zlib_archive="zlib-${zlib_tag}.tar.gz"
-      zlib_latest_url="https://github.com/madler/zlib/releases/download/v${zlib_tag}/${zlib_archive}"
+      zlib_latest_url="https://github.com/madler/zlib/releases/download/${zlib_release_tag}/${zlib_archive}"
       zlib_tar_flags="-zxf"
     else
       zlib_tag="$(retry wget -qO- --compression=auto https://zlib.net/ \| grep -i "'<FONT.*FONT>'" \| sed -r "'s/.*zlib\s*([^<]+).*/\1/'" \| head -1)"
@@ -331,8 +414,21 @@ prepare_gmp() {
 }
 
 prepare_expat() {
-  expat_tag="${MINGW_EXPAT_VER:-2.5.0}"
-  expat_release_tag="R_${expat_tag//./_}"
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    expat_release_tag="${MINGW_EXPAT_RELEASE_TAG:-$(github_latest_stable_tag_or_fallback libexpat/libexpat '^R_[0-9]+_[0-9]+_[0-9]+$' "${FALLBACK_EXPAT_RELEASE_TAG}")}"
+    expat_tag="${MINGW_EXPAT_VER:-${expat_release_tag#R_}}"
+    expat_tag="${expat_tag//_/.}"
+    if [ -n "${MINGW_EXPAT_VER}" ] && [ -z "${MINGW_EXPAT_RELEASE_TAG}" ]; then
+      expat_release_tag="R_${expat_tag//./_}"
+    fi
+  else
+    expat_release_tag="${EXPAT_RELEASE_TAG:-$(github_latest_stable_tag_or_fallback libexpat/libexpat '^R_[0-9]+_[0-9]+_[0-9]+$' "${FALLBACK_EXPAT_RELEASE_TAG}")}"
+    expat_tag="${EXPAT_VER:-${expat_release_tag#R_}}"
+    expat_tag="${expat_tag//_/.}"
+    if [ -n "${EXPAT_VER}" ] && [ -z "${EXPAT_RELEASE_TAG}" ]; then
+      expat_release_tag="R_${expat_tag//./_}"
+    fi
+  fi
   expat_archive="expat-${expat_tag}.tar.bz2"
   expat_latest_url="https://github.com/libexpat/libexpat/releases/download/${expat_release_tag}/${expat_archive}"
   if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
@@ -405,9 +501,9 @@ prepare_ssl() {
     echo "- libressl: ${libressl_ver}, source: ${libressl_latest_url:-cached libressl}" >>"${BUILD_INFO}"
   else
     # openssl
-    openssl_filename="$(retry wget -qO- --compression=auto https://openssl-library.org/source/ \| grep -o "'>openssl-3\(\.[0-9]*\)*tar.gz<'" \| grep -o "'[^>]*.tar.gz'" \| sort -nr \| head -1)"
+    openssl_latest_url="${OPENSSL_URL:-$(github_latest_stable_asset_url_or_fallback openssl/openssl '^openssl-3[.][0-9]+[.][0-9]+$' '^openssl-3[.][0-9]+[.][0-9]+[.]tar[.]gz$' "${FALLBACK_OPENSSL_URL}")}"
+    openssl_filename="$(basename "${openssl_latest_url}")"
     openssl_ver="$(echo "${openssl_filename}" | sed -r 's/openssl-(.+)\.tar\.gz/\1/')"
-    openssl_latest_url="https://github.com/openssl/openssl/releases/download/openssl-${openssl_ver}/${openssl_filename}"
     if [ x"${USE_CHINA_MIRROR}" = x1 ]; then
       openssl_latest_url="https://gh-proxy.com/${openssl_latest_url}"
     fi
@@ -462,8 +558,8 @@ prepare_libxml2() {
 
 prepare_sqlite() {
   if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-    sqlite_tag="${MINGW_SQLITE_AUTOCONF_VER:-3430100}"
-    sqlite_year="${MINGW_SQLITE_YEAR:-2023}"
+    sqlite_tag="${MINGW_SQLITE_AUTOCONF_VER:-3530200}"
+    sqlite_year="${MINGW_SQLITE_YEAR:-2026}"
     sqlite_archive="sqlite-autoconf-${sqlite_tag}.tar.gz"
     sqlite_src_dir="sqlite-autoconf-${sqlite_tag}"
     sqlite_latest_url="https://www.sqlite.org/${sqlite_year}/${sqlite_archive}"
@@ -498,14 +594,19 @@ prepare_sqlite() {
 
 prepare_c_ares() {
   if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-    cares_ver="${MINGW_CARES_VER:-1.19.1}"
-    cares_release_tag="cares-${cares_ver//./_}"
+    cares_release_tag="${MINGW_CARES_RELEASE_TAG:-$(github_latest_stable_tag_or_fallback c-ares/c-ares '^v[0-9]+[.][0-9]+[.][0-9]+$' "${FALLBACK_CARES_RELEASE_TAG}")}"
+    cares_ver="${MINGW_CARES_VER:-${cares_release_tag#v}}"
+    if [ -n "${MINGW_CARES_VER}" ] && [ -z "${MINGW_CARES_RELEASE_TAG}" ]; then
+      cares_release_tag="v${cares_ver}"
+    fi
     cares_latest_url="https://github.com/c-ares/c-ares/releases/download/${cares_release_tag}/c-ares-${cares_ver}.tar.gz"
   else
-    # cares_latest_tag="$(retry wget -qO- --compression=auto https://api.github.com/repos/c-ares/c-ares/releases \| jq -r "'.[0].tag_name'")"
-    # waiting for new release to resolve: https://github.com/c-ares/c-ares/issues/1069
-    cares_latest_tag="v1.34.5"
+    cares_latest_tag="${CARES_RELEASE_TAG:-$(github_latest_stable_tag_or_fallback c-ares/c-ares '^v[0-9]+[.][0-9]+[.][0-9]+$' "${FALLBACK_CARES_RELEASE_TAG}")}"
     cares_ver="${cares_latest_tag#v}"
+    if [ -n "${CARES_VER}" ] && [ -z "${CARES_RELEASE_TAG}" ]; then
+      cares_ver="${CARES_VER}"
+      cares_latest_tag="v${cares_ver}"
+    fi
     cares_latest_url="https://github.com/c-ares/c-ares/releases/download/${cares_latest_tag}/c-ares-${cares_ver}.tar.gz"
     # cares_ver="main"
     # cares_latest_url="https://github.com/c-ares/c-ares/archive/refs/heads/main.tar.gz"
@@ -546,10 +647,14 @@ prepare_c_ares() {
 
 prepare_libssh2() {
   if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-    libssh2_tag="${MINGW_LIBSSH2_VER:-1.11.0}"
-    libssh2_archive="libssh2-${libssh2_tag}.tar.bz2"
+    libssh2_release_tag="${MINGW_LIBSSH2_RELEASE_TAG:-$(github_latest_stable_tag_or_fallback libssh2/libssh2 '^libssh2-[0-9]+[.][0-9]+[.][0-9]+$' "${FALLBACK_LIBSSH2_RELEASE_TAG}")}"
+    libssh2_tag="${MINGW_LIBSSH2_VER:-${libssh2_release_tag#libssh2-}}"
+    if [ -n "${MINGW_LIBSSH2_VER}" ] && [ -z "${MINGW_LIBSSH2_RELEASE_TAG}" ]; then
+      libssh2_release_tag="libssh2-${libssh2_tag}"
+    fi
+    libssh2_archive="libssh2-${libssh2_tag}.tar.xz"
     libssh2_latest_url="https://libssh2.org/download/${libssh2_archive}"
-    libssh2_tar_flags="-jxf"
+    libssh2_tar_flags="-Jxf"
   else
     libssh2_tag="$(retry wget -qO- --compression=auto https://libssh2.org/ \| sed -nr "'s@.*libssh2 ([^<]*).*released on.*@\1@p'")"
     libssh2_archive="libssh2-${libssh2_tag}.tar.xz"
@@ -640,7 +745,11 @@ build_aria2() {
       ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares --with-ca-bundle=C:/ca-certificates.crt"
     fi
   else
-    ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares"
+    if [ x"${LINUX_OFFICIAL_STYLE}" = x1 ]; then
+      ARIA2_EXT_CONF="--without-included-gettext --disable-nls --with-openssl --without-gnutls --with-libcares --with-sqlite3 --without-libxml2 --with-libexpat --with-libz --without-libgmp --with-libssh2 --without-libgcrypt --without-libnettle"
+    else
+      ARIA2_EXT_CONF="--with-openssl --without-gnutls --with-libcares"
+    fi
   fi
   if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
     ./configure \
@@ -657,10 +766,19 @@ build_aria2() {
     ./configure --host="${CROSS_HOST}" --prefix="${CROSS_PREFIX}" --enable-static --disable-shared --enable-silent-rules ARIA2_STATIC=yes ${ARIA2_EXT_CONF}
   fi
   make -j$(nproc)
-  make install
+  if [ x"${TARGET_HOST}" = xLinux ] && [ x"${LINUX_SIZE_OPTIMIZE}" = x1 ]; then
+    make install-strip || {
+      make install
+      "${CROSS_HOST}-strip" -s "${CROSS_PREFIX}/bin/"aria2c* || true
+    }
+  else
+    make install
+  fi
   # Strip debug symbols to reduce binary size
   if [ x"${TARGET_HOST}" = xWindows ]; then
     "${CROSS_HOST}-strip" "${CROSS_PREFIX}/bin/"aria2c* || true
+  elif [ x"${TARGET_HOST}" = xLinux ] && [ x"${LINUX_SIZE_OPTIMIZE}" = x1 ]; then
+    "${CROSS_HOST}-strip" -s "${CROSS_PREFIX}/bin/"aria2c* || true
   fi
   # Bundle CA certificates for Windows builds
   if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" != x1 ]; then
@@ -706,10 +824,16 @@ if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
   prepare_gmp
   prepare_expat
 else
-  prepare_xz
+  if [ x"${TARGET_HOST}" = xLinux ] && [ x"${LINUX_OFFICIAL_STYLE}" = x1 ]; then
+    prepare_expat
+  else
+    prepare_xz
+  fi
   prepare_ssl
-  prepare_libiconv
-  prepare_libxml2
+  if [ x"${TARGET_HOST}" != xLinux ] || [ x"${LINUX_OFFICIAL_STYLE}" != x1 ]; then
+    prepare_libiconv
+    prepare_libxml2
+  fi
 fi
 prepare_sqlite
 prepare_c_ares
