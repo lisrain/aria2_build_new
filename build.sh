@@ -737,7 +737,7 @@ build_aria2() {
   # Configure aria2.  The Windows path mirrors upstream mingw-config.
   if [ x"${TARGET_HOST}" = xWindows ]; then
     if [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-      ARIA2_EXT_CONF="--without-included-gettext --disable-nls --with-libcares --without-gnutls --without-openssl --with-sqlite3 --without-libxml2 --with-libexpat --with-libz --with-libgmp --with-libssh2 --without-libgcrypt --without-libnettle --with-cppunit-prefix=${CROSS_PREFIX}"
+      ARIA2_EXT_CONF="--without-included-gettext --disable-nls --without-libcares --without-gnutls --without-openssl --with-sqlite3 --without-libxml2 --with-libexpat --with-libz --with-libgmp --with-libssh2 --without-libgcrypt --without-libnettle --with-cppunit-prefix=${CROSS_PREFIX}"
     else
       if [ ! -f "${DOWNLOADS_DIR}/ca-certificates.crt" ]; then
         retry wget -cT10 -O "${DOWNLOADS_DIR}/ca-certificates.crt" "https://curl.se/ca/cacert.pem"
@@ -837,7 +837,9 @@ else
   fi
 fi
 prepare_sqlite
-prepare_c_ares
+if [ x"${TARGET_HOST}" != xWindows ] || [ x"${USE_OFFICIAL_MINGW}" != x1 ]; then
+  prepare_c_ares
+fi
 prepare_libssh2
 build_aria2
 

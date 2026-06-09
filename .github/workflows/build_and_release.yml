@@ -168,7 +168,7 @@ jobs:
 
             ## Dependencies
 
-            Linux builds use an upstream-style static profile: OpenSSL 3.x, zlib-ng/zlib, c-ares, libssh2, sqlite3, expat, and stripped size-optimized binaries. Windows builds mirror upstream mingw-config with newer stable zlib, c-ares, libssh2, sqlite3, expat, and gmp defaults. GitHub-hosted dependencies prefer the latest stable release and fall back to locally verified versions if release lookup fails.
+            Linux builds use an upstream-style static profile: OpenSSL 3.x, zlib-ng/zlib, c-ares, libssh2, sqlite3, expat, and stripped size-optimized binaries. Windows builds mirror upstream mingw-config with newer stable zlib, libssh2, sqlite3, expat, gmp, WinTLS, and system DNS defaults. GitHub-hosted dependencies prefer the latest stable release and fall back to locally verified versions if release lookup fails.
             "
           echo "✅ Draft release created"
         env:
@@ -303,7 +303,7 @@ jobs:
             }
           }
 
-      - name: Verify HTTPS certificate handling
+      - name: Extract Windows release assets
         shell: pwsh
         run: |
           $archives = Get-ChildItem smoke -Filter "aria2-*-w64-mingw32_static.zip"
@@ -315,10 +315,48 @@ jobs:
               Write-Error "aria2c.exe not found in $($archive.Name)"
               exit 1
             }
-            & $aria2.FullName --version
-            & $aria2.FullName -t 10 --console-log-level=debug --http-accept-gzip=true "https://github.com/" -d $env:TEMP -o "aria2-https-smoke-test-$($archive.BaseName).html"
+            Write-Host "Extracted $($archive.Name) to $outDir"
+          }
+
+      - name: Verify Windows DNS defaults
+        shell: pwsh
+        run: |
+          $targets = Get-ChildItem smoke -Directory -Filter "aria2-*-w64-mingw32_static"
+          foreach ($target in $targets) {
+            $aria2 = Get-ChildItem -Recurse $target.FullName -Filter "aria2c.exe" | Select-Object -First 1
+            if (-not $aria2) {
+              Write-Error "aria2c.exe not found in $($target.Name)"
+              exit 1
+            }
+
+            $versionInfo = & $aria2.FullName --version
+            $versionInfo
+            if ($versionInfo -match "Async DNS|c-ares") {
+              Write-Error "Windows build still enables c-ares async DNS for $($target.Name)"
+              exit 1
+            }
+
+            & $aria2.FullName --dry-run=true --max-tries=1 --connect-timeout=10 --timeout=10 --console-log-level=debug --http-accept-gzip=true "https://dldir1v6.qq.com/weixin/Universal/Windows/WeChatWin_4.1.10.exe" -d $env:TEMP -o "aria2-dns-smoke-test-$($target.Name).exe"
             if ($LASTEXITCODE -ne 0) {
-              Write-Error "HTTPS smoke test failed for $($archive.Name)"
+              Write-Error "DNS smoke test failed for $($target.Name)"
+              exit $LASTEXITCODE
+            }
+          }
+
+      - name: Verify Windows HTTPS certificate handling
+        shell: pwsh
+        run: |
+          $targets = Get-ChildItem smoke -Directory -Filter "aria2-*-w64-mingw32_static"
+          foreach ($target in $targets) {
+            $aria2 = Get-ChildItem -Recurse $target.FullName -Filter "aria2c.exe" | Select-Object -First 1
+            if (-not $aria2) {
+              Write-Error "aria2c.exe not found in $($target.Name)"
+              exit 1
+            }
+
+            & $aria2.FullName -t 10 --console-log-level=debug --http-accept-gzip=true "https://github.com/" -d $env:TEMP -o "aria2-https-smoke-test-$($target.Name).html"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "HTTPS smoke test failed for $($target.Name)"
               exit $LASTEXITCODE
             }
           }
