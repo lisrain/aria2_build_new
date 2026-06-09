@@ -804,13 +804,14 @@ test_build() {
   # get release
   cp -fv "${CROSS_PREFIX}/bin/"aria2* "${SELF_DIR}"
   echo "============= ARIA2 TEST DOWNLOAD =============="
+  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
+    echo "Skipping Wine network download test for upstream-style Windows builds."
+    echo "Windows HTTPS behavior is covered by the windows-https-smoke-test job."
+    echo "================================================"
+    return 0
+  fi
   TEST_ARGS="-t 10 --console-log-level=debug --http-accept-gzip=true"
   TEST_URL="https://github.com/"
-  if [ x"${TARGET_HOST}" = xWindows ] && [ x"${USE_OFFICIAL_MINGW}" = x1 ]; then
-    # Wine does not reliably reflect the real Windows certificate store.
-    # HTTPS certificate verification is covered by the windows-https-smoke-test job.
-    TEST_URL="http://example.com/"
-  fi
   "${RUNNER_CHECKER}" "${CROSS_PREFIX}/bin/aria2c"* ${TEST_ARGS} "${TEST_URL}" -d /tmp -o test
   echo "================================================"
 }
